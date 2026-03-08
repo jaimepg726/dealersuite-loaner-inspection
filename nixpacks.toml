@@ -1,0 +1,6 @@
+# Tell NIXPACKS to install both Node.js and Python
+# so the build command can run `npm` and `pip` in the same image.
+providers = ["node", "python"]
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "python311", "python311Packages.pip"]
