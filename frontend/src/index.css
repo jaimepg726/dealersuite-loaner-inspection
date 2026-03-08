@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hide scrollbars on horizontal filter rows (keeps UI clean on iPad) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* -----------------------------------------------------------------------
+   DealerSuite Global Base Styles
+   Optimized for iPad / touch-first use by non-technical staff
+----------------------------------------------------------------------- */
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    @apply bg-brand-dark text-brand-white;
+    font-family: 'Inter', system-ui, sans-serif;
+    /* Prevent bounce scroll on iOS */
+    overscroll-behavior: none;
+    /* Safe area insets for notched iPhones */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Larger default touch targets */
+  button, a, input, select {
+    @apply min-h-touch;
+  }
+
+  input, textarea, select {
+    @apply text-base;   /* prevents iOS zoom on focus (needs font-size >= 16px) */
+    font-size: 16px !important;
+  }
+}
+
+@layer components {
+  /* Primary action button — large, full-width, high contrast */
+  .btn-primary {
+    @apply bg-brand-blue text-white font-bold text-lg py-4 px-6 rounded-2xl
+           w-full min-h-touch flex items-center justify-center gap-3
+           active:scale-95 transition-transform select-none;
+  }
+
+  .btn-success {
+    @apply bg-brand-green text-white font-bold text-lg py-4 px-6 rounded-2xl
+           w-full min-h-touch flex items-center justify-center gap-3
+           active:scale-95 transition-transform select-none;
+  }
+
+  .btn-danger {
+    @apply bg-brand-red text-white font-bold text-lg py-4 px-6 rounded-2xl
+           w-full min-h-touch flex items-center justify-center gap-3
+           active:scale-95 transition-transform select-none;
+  }
+
+  .btn-ghost {
+    @apply bg-brand-accent text-brand-white font-semibold text-base py-3 px-5
+           rounded-xl min-h-touch flex items-center justify-center gap-2
+           active:scale-95 transition-transform select-none;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-brand-mid rounded-2xl p-5 border border-brand-accent;
+  }
+
+  /* Section heading */
+  .section-title {
+    @apply text-xl font-bold text-brand-white mb-3;
+  }
+}
