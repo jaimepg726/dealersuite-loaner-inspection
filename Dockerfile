@@ -35,6 +35,9 @@ COPY backend/ ./
 # Copy built frontend dist into the location FastAPI expects
 COPY --from=frontend-build /app/frontend/dist ./frontend_dist
 
+# Ensure Python output (stdout/stderr) is never buffered — all logs are visible in Railway
+ENV PYTHONUNBUFFERED=1
+
 # Railway assigns PORT at runtime; uvicorn must bind to it.
 # CMD is overridden by railway.toml startCommand, but keep a sensible default.
 CMD ["sh", "-c", "alembic upgrade head && python seed.py && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
