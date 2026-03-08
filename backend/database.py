@@ -29,8 +29,8 @@ engine = create_async_engine(
     _db_url,
     echo=settings.environment == "development",  # log SQL in dev only
     pool_pre_ping=True,                           # drop stale connections
-    pool_size=10,
-    max_overflow=20,
+    pool_size=5,
+    max_overflow=10,
 )
 
 AsyncSessionLocal = async_sessionmaker(
