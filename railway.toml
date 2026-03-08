@@ -1,12 +1,10 @@
 # ── DealerSuite Loaner Inspection — Railway deployment config ─────────────────
 #
-# Single-service deployment:
-#   1. Builds the React frontend (npm ci + npm run build)
-#   2. Copies the dist into backend/frontend_dist
-#   3. Installs Python dependencies
-#   4. Starts the FastAPI server (uvicorn)
+# Multi-stage Dockerfile build:
+#   Stage 1 (node:20-alpine)     → npm ci + vite build → dist/
+#   Stage 2 (python:3.11-slim)   → pip install + copy dist → FastAPI serves both
 #
-# FastAPI then serves /api/* routes AND the React SPA from the same URL.
+# FastAPI serves /api/* routes AND the React SPA from the same Railway URL.
 # No second Railway service needed.
 #
 # Required Railway environment variables:
@@ -17,11 +15,11 @@
 #   ENVIRONMENT                     — production
 
 [build]
-builder      = "NIXPACKS"
-buildCommand = "cd frontend && npm ci && npm run build && cp -r dist ../backend/frontend_dist && cd ../backend && python -m pip install -r requirements.txt"
+builder      = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand     = "cd backend && alembic upgrade head && python seed.py && uvicorn main:app --host 0.0.0.0 --port $PORT"
+startCommand     = "cd /app/backend && alembic upgrade head && python seed.py && uvicorn main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath  = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
