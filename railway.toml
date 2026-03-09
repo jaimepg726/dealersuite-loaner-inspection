@@ -19,7 +19,7 @@ builder      = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand     = "python -c \"import os,sys,time; p=os.environ.get('PORT','NOT_SET'); print('DIAG PORT='+p,flush=True); sys.stderr.write('DIAG_STDERR PORT='+p+chr(10)); sys.stderr.flush(); time.sleep(400)\""
+startCommand     = "true && python -c 'import os,time; p=os.environ.get(\"PORT\",\"NOT_SET\"); print(\"DIAG PORT=\"+p, flush=True); time.sleep(400)'"
 healthcheckPath  = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
