@@ -5,7 +5,7 @@ One record per inspection event (checkout or check-in walkround).
 
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -42,12 +42,12 @@ class Inspection(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
-    # Inspection metadata
+    # Inspection metadata  (String to match migration — enums used for validation only)
     inspection_type: Mapped[str] = mapped_column(
-        Enum(InspectionType), nullable=False
+        String(20), nullable=False
     )
     status: Mapped[str] = mapped_column(
-        Enum(InspectionStatus),
+        String(20),
         default=InspectionStatus.in_progress,
         nullable=False,
     )

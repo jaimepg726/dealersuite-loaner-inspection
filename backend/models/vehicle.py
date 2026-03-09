@@ -5,7 +5,7 @@ Represents a single loaner, inventory, or sales vehicle in the fleet.
 
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, DateTime, Enum, Boolean
+from sqlalchemy import String, Integer, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -47,12 +47,12 @@ class Vehicle(Base):
     mileage: Mapped[int | None]      = mapped_column(Integer, nullable=True)
     color:   Mapped[str | None]      = mapped_column(String(30), nullable=True)
 
-    # Status / type
+    # Status / type  (String to match migration — enums used for validation only)
     status: Mapped[str] = mapped_column(
-        Enum(VehicleStatus), default=VehicleStatus.active, nullable=False
+        String(20), default=VehicleStatus.active, nullable=False
     )
     vehicle_type: Mapped[str] = mapped_column(
-        Enum(VehicleType), default=VehicleType.loaner, nullable=False
+        String(20), default=VehicleType.loaner, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
