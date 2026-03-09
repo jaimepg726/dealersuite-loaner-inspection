@@ -133,3 +133,4 @@ else:
     async def root():
         return {"message": f"{settings.app_name} API is running. "
                            "Frontend served separately on port 5173."}
+
