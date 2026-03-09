@@ -99,10 +99,14 @@ async def health_check():
 # ---------------------------------------------------------------------------
 if STATIC_DIR.exists():
     # Serve hashed JS/CSS assets — Vite puts them in assets/
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+    _assets_dir = STATIC_DIR / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
 
-    # Serve any other static files in the dist root (icons, manifest.json, etc.)
-    app.mount("/icons",  StaticFiles(directory=STATIC_DIR / "icons"),  name="icons")
+    # Serve icons only if the directory exists (Vite may not produce it)
+    _icons_dir = STATIC_DIR / "icons"
+    if _icons_dir.exists():
+        app.mount("/icons", StaticFiles(directory=_icons_dir), name="icons")
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():
