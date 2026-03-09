@@ -38,6 +38,10 @@ COPY --from=frontend-build /app/frontend/dist ./frontend_dist
 # Ensure Python output (stdout/stderr) is never buffered — all logs are visible in Railway
 ENV PYTHONUNBUFFERED=1
 
+# Tell Railway/Docker which port this service listens on.
+# Railway uses this to inject PORT and route healthchecks correctly.
+EXPOSE 8000
+
 # Railway assigns PORT at runtime; uvicorn must bind to it.
 # CMD is overridden by railway.toml startCommand, but keep a sensible default.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
