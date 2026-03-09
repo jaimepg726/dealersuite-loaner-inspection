@@ -11,6 +11,7 @@ psycopg2-binary==2.9.9   # sync fallback / alembic
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==3.2.2           # pin to 3.x — passlib 1.7.4 incompatible with bcrypt>=4
 python-multipart==0.0.9
 
 # Google Drive
