@@ -6,7 +6,7 @@ Managers can attach a repair order (RO) number once the item goes to shop.
 
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -51,9 +51,9 @@ class Damage(Base):
         index=True,
     )
 
-    # Damage details
+    # Damage details  (String to match migration — enums used for validation only)
     location: Mapped[str | None] = mapped_column(
-        Enum(DamageLocation), nullable=True
+        String(30), nullable=True
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -66,7 +66,7 @@ class Damage(Base):
 
     # Status lifecycle
     status: Mapped[str] = mapped_column(
-        Enum(DamageStatus), default=DamageStatus.open, nullable=False, index=True
+        String(20), default=DamageStatus.open, nullable=False, index=True
     )
 
     # Manager notes
