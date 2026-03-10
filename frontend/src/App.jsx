@@ -35,12 +35,14 @@ import InspectPage              from './pages/InspectPage'
 import ManagerLayout            from './pages/ManagerLayout'
 
 // Dashboard sub-pages
-import InspectionsPage  from './pages/dashboard/InspectionsPage'
-import FleetPage        from './pages/dashboard/FleetPage'
-import DamagePage       from './pages/dashboard/DamagePage'
-import ReportsPage      from './pages/dashboard/ReportsPage'
-import SettingsPage     from './pages/dashboard/SettingsPage'
-import LoanersPage      from './pages/dashboard/LoanersPage'
+import InspectionsPage        from './pages/dashboard/InspectionsPage'
+import InspectionDetail       from './pages/dashboard/InspectionDetail'
+import ManagerInspectionDetail from './pages/dashboard/ManagerInspectionDetail'
+import FleetPage              from './pages/dashboard/FleetPage'
+import DamagePage             from './pages/dashboard/DamagePage'
+import ReportsPage            from './pages/dashboard/ReportsPage'
+import SettingsPage           from './pages/dashboard/SettingsPage'
+import LoanersPage            from './pages/dashboard/LoanersPage'
 
 export default function App() {
   return (
@@ -83,12 +85,13 @@ export default function App() {
           </ProtectedRoute>
         }>
           {/* Default dashboard tab = Inspections */}
-          <Route index          element={<InspectionsPage />} />
-          <Route path="fleet"   element={<FleetPage />} />
-          <Route path="damage"   element={<DamagePage />} />
-          <Route path="loaners"  element={<LoanersPage />} />
-          <Route path="reports"  element={<ReportsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route index                              element={<InspectionsPage />} />
+          <Route path="inspections/:inspectionId"  element={<ManagerInspectionDetail />} />
+          <Route path="fleet"                       element={<FleetPage />} />
+          <Route path="damage"                      element={<DamagePage />} />
+          <Route path="loaners"                     element={<LoanersPage />} />
+          <Route path="reports"                     element={<ReportsPage />} />
+          <Route path="settings"                    element={<SettingsPage />} />
         </Route>
 
         {/* ── Catch-all ──────────────────────────────────────────────── */}

@@ -46,6 +46,12 @@ export default function InspectionsPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Refresh when demo mode is toggled so dashboard shows correct data set
+  useEffect(() => {
+    window.addEventListener('demo-mode-changed', load)
+    return () => window.removeEventListener('demo-mode-changed', load)
+  }, [load])
+
   return (
     <div className="flex flex-col">
       {/* Header */}

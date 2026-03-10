@@ -24,6 +24,7 @@ from services.inspection_service import (
     get_inspection_by_id,
     update_drive_folder,
     set_video_url,
+    add_media,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,7 +174,13 @@ async def upload_media(
     # Persist file reference on inspection/damage record
     if result.success and media_type == "video" and result.file_id:
         await set_video_url(db, inspection_id, result.file_id, result.file_url)
-        await db.commit()
+
+    # Save to inspection_media table for the gallery
+    if result.success and result.file_url:
+        db_media_type = "video" if media_type == "video" else "photo"
+        await add_media(db, inspection_id, result.file_url, db_media_type)
+
+    await db.commit()
 
     if not result.success and result.backend == "local" and not result.file_id:
         raise HTTPException(status_code=502, detail="Upload failed on all backends")

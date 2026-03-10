@@ -1,8 +1,9 @@
 /**
  * DealerSuite — Inspection Card
  * Single row in the inspections list.
- * Tapping opens the Drive folder link if available.
+ * Tapping navigates to the full inspection detail page.
  */
+import { useNavigate } from 'react-router-dom'
 import { ExternalLink, Camera, AlertTriangle } from 'lucide-react'
 
 const TYPE_COLOR = {
@@ -25,12 +26,16 @@ function formatDate(iso) {
 }
 
 export default function InspectionCard({ inspection }) {
+  const navigate = useNavigate()
   const { vehicle } = inspection
   const typeCls   = TYPE_COLOR[inspection.inspection_type]   || TYPE_COLOR.Checkout
   const statusCls = STATUS_COLOR[inspection.status]          || 'text-gray-400'
 
   return (
-    <div className="card hover:border-brand-blue/40 transition-colors">
+    <div
+      className="card hover:border-brand-blue/40 transition-colors cursor-pointer"
+      onClick={() => navigate(`/dashboard/inspections/${inspection.id}`)}
+    >
       <div className="flex items-start justify-between gap-3">
         {/* Left: vehicle + meta */}
         <div className="flex-1 min-w-0">

@@ -15,6 +15,7 @@ from utils.time import utcnow
 from models.vehicle import Vehicle
 from models.loaner import Loaner
 from models.inspection import Inspection
+from models.inspection_media import InspectionMedia
 
 router = APIRouter()
 
@@ -102,9 +103,10 @@ async def demo_enable(
             is_demo=True,
         ))
 
-    # Insert inspections
+    # Insert inspections and collect them for media linking
+    inspections = []
     for i in _DEMO_INSPECTIONS:
-        db.add(Inspection(
+        insp = Inspection(
             vehicle_id=vehicles[i["vehicle_idx"]].id,
             inspection_type=i["inspection_type"],
             status=i["status"],
@@ -113,7 +115,27 @@ async def demo_enable(
             started_at=now - timedelta(hours=4),
             completed_at=now - timedelta(hours=3, minutes=30),
             is_demo=True,
-        ))
+        )
+        db.add(insp)
+        inspections.append(insp)
+    await db.flush()  # get inspection IDs
+
+    # Insert demo media records (simulated Drive URLs)
+    for idx, insp in enumerate(inspections):
+        for p in range(1, 4):
+            db.add(InspectionMedia(
+                inspection_id=insp.id,
+                file_url=f"https://drive.google.com/file/d/DEMO_PHOTO_{idx+1}_{p}/view",
+                media_type="photo",
+                created_at=now - timedelta(hours=3, minutes=45),
+            ))
+        if idx < 2:  # first two inspections also have a demo video
+            db.add(InspectionMedia(
+                inspection_id=insp.id,
+                file_url=f"https://drive.google.com/file/d/DEMO_VIDEO_{idx+1}/view",
+                media_type="video",
+                created_at=now - timedelta(hours=3, minutes=50),
+            ))
 
     await db.commit()
     return {"detail": "Demo mode enabled", "vehicles": len(_DEMO_VEHICLES)}
@@ -124,6 +146,7 @@ async def demo_disable(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_manager),
 ):
+    # inspection_media rows cascade-delete when inspections are deleted
     await db.execute(text("DELETE FROM inspections WHERE is_demo = true"))
     await db.execute(text("DELETE FROM loaners     WHERE is_demo = true"))
     await db.execute(text("DELETE FROM vehicles    WHERE is_demo = true"))

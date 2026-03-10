@@ -24,6 +24,20 @@ _TIMESTAMPTZ_MIGRATIONS = [
     ("vehicles", "updated_at"),
 ]
 
+# New tables created on every startup if they don't exist.
+_CREATE_TABLES = [
+    """
+    CREATE TABLE IF NOT EXISTS inspection_media (
+        id            SERIAL PRIMARY KEY,
+        inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+        file_url      TEXT NOT NULL,
+        media_type    VARCHAR(10) NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_inspection_media_inspection_id ON inspection_media(inspection_id)",
+]
+
 
 async def run_migrations(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
@@ -47,3 +61,10 @@ async def run_migrations(engine: AsyncEngine) -> None:
                 logger.info("Migration: converted %s.%s to TIMESTAMPTZ", table, column)
             except Exception:
                 pass  # already TIMESTAMPTZ, table missing, or non-PostgreSQL DB
+
+        for stmt in _CREATE_TABLES:
+            try:
+                await conn.execute(text(stmt))
+                logger.info("Migration: executed table/index creation")
+            except Exception:
+                pass  # already exists or incompatible DB

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from models.vehicle import Vehicle
     from models.damage  import Damage
     from models.user    import User
+    from models.inspection_media import InspectionMedia
 
 
 class InspectionType(str, enum.Enum):
@@ -84,6 +85,9 @@ class Inspection(Base):
     vehicle:  Mapped["Vehicle"] = relationship("Vehicle", back_populates="inspections")
     damages:  Mapped[list["Damage"]] = relationship(
         "Damage", back_populates="inspection", cascade="all, delete-orphan"
+    )
+    media: Mapped[list["InspectionMedia"]] = relationship(
+        "InspectionMedia", back_populates="inspection", cascade="all, delete-orphan"
     )
     inspector: Mapped["User | None"] = relationship("User", foreign_keys=[inspector_id])
 

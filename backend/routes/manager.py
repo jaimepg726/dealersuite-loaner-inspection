@@ -26,7 +26,7 @@ from schemas.inspection import InspectionListResponse, InspectionResponse
 from schemas.damage import DamageListResponse, DamageResponse, DamageUpdate
 from schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse
 from services.inspection_service import (
-    list_inspections, get_inspection_by_id, get_dashboard_stats
+    list_inspections, get_inspection_by_id, get_dashboard_stats, get_demo_mode
 )
 from services.damage_service import list_damages, update_damage
 
@@ -42,7 +42,8 @@ async def get_stats(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_manager),
 ):
-    return await get_dashboard_stats(db)
+    demo = await get_demo_mode(db)
+    return await get_dashboard_stats(db, is_demo=demo if demo else False)
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +65,11 @@ async def route_list_inspections(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_manager),
 ):
+    demo = await get_demo_mode(db)
     total, inspections = await list_inspections(
-        db, status, inspection_type, vehicle_id, days, skip, limit
+        db, status, inspection_type, vehicle_id, days,
+        is_demo=demo if demo else False,
+        skip=skip, limit=limit,
     )
     return InspectionListResponse(total=total, inspections=inspections)
 
@@ -128,7 +132,8 @@ async def route_reports(
     current_user=Depends(require_manager),
 ):
     """Returns the same stats as /stats plus a full type breakdown for charts."""
-    return await get_dashboard_stats(db)
+    demo = await get_demo_mode(db)
+    return await get_dashboard_stats(db, is_demo=demo if demo else False)
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,14 @@ from pydantic import BaseModel
 from schemas.damage import DamageResponse
 
 
+class MediaItem(BaseModel):
+    type: str   # "photo" or "video"
+    url:  str
+
+    class Config:
+        from_attributes = True
+
+
 class InspectionStart(BaseModel):
     """Porter sends this when tapping 'Start Inspection'."""
     vehicle_id:      int
@@ -36,6 +44,9 @@ class InspectionResponse(BaseModel):
 
     # Nested damages (loaded when viewing a single inspection)
     damages: list[DamageResponse] = []
+
+    # Uploaded media items (photos and videos)
+    media: list[MediaItem] = []
 
     class Config:
         from_attributes = True
