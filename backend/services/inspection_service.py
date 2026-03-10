@@ -68,7 +68,11 @@ async def get_inspection_by_id(
 ) -> Inspection:
     result = await db.execute(
         select(Inspection)
-        .options(selectinload(Inspection.damages), selectinload(Inspection.vehicle))
+        .options(
+            selectinload(Inspection.damages),
+            selectinload(Inspection.vehicle),
+            selectinload(Inspection.media),
+        )
         .where(Inspection.id == inspection_id)
     )
     inspection = result.scalar_one_or_none()

@@ -8,8 +8,6 @@ GET  /api/inspect/{id}              -> inspection detail
 import asyncio
 import logging
 import re
-from typing import Literal
-
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -114,6 +112,18 @@ async def complete_inspection(
     return await get_inspection_by_id(db, inspection.id)
 
 
+ALLOWED_IMAGE_MIMETYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_VIDEO_MIMETYPES = {"video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"}
+ALLOWED_MIMETYPES = ALLOWED_IMAGE_MIMETYPES | ALLOWED_VIDEO_MIMETYPES
+
+_VIDEO_EXT_MAP = {
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-msvideo": "avi",
+}
+
+
 # POST /{id}/upload
 @router.post(
     "/{inspection_id}/upload",
@@ -123,18 +133,37 @@ async def complete_inspection(
 async def upload_media(
     inspection_id: int,
     file: UploadFile = File(...),
-    media_type: Literal["video", "photo"] = Query("photo"),
     damage_location: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     from storage import get_storage_backend, build_filename
+    from models.inspection_media import InspectionMedia
+    from utils.time import utcnow as _utcnow
 
+    # 1. Confirm inspection exists before upload
     inspection = await get_inspection_by_id(db, inspection_id)
 
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds the 512 MB limit")
+
+    # 2 & 3. Validate MIME type and determine media_type from content_type
+    content_type = (file.content_type or "").lower()
+    if content_type.startswith("image/"):
+        media_type = "photo"
+    elif content_type.startswith("video/"):
+        media_type = "video"
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported media type '{content_type}'. Must be image or video.",
+        )
+    if content_type not in ALLOWED_MIMETYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported MIME type '{content_type}'. Allowed: {', '.join(sorted(ALLOWED_MIMETYPES))}",
+        )
 
     # Build standardised filename: {LoanerNumber}_{Type}_{Date}_{HHMMSS}.ext
     vehicle = inspection.vehicle
@@ -143,68 +172,35 @@ async def upload_media(
     if hasattr(itype, "value"):
         itype = itype.value
 
-    ALLOWED_VIDEO_MIMETYPES = {
-        "video/mp4",
-        "video/quicktime",
-        "video/webm",
-        "video/x-msvideo",
-    }
-
     if media_type == "video":
-        detected = (file.content_type or "").lower()
-        if detected not in ALLOWED_VIDEO_MIMETYPES:
-            raise HTTPException(
-                status_code=415,
-                detail=f"Unsupported video type '{detected}'. Allowed: {', '.join(sorted(ALLOWED_VIDEO_MIMETYPES))}",
-            )
-        ext_map = {
-            "video/mp4": "mp4",
-            "video/quicktime": "mov",
-            "video/webm": "webm",
-            "video/x-msvideo": "avi",
-        }
-        ext = ext_map.get(detected, "mp4")
+        ext = _VIDEO_EXT_MAP.get(content_type, "mp4")
         filename = build_filename(loaner, itype, ext)
-        mimetype = detected
         folder_hint = "inspections"
     else:
         ext = "jpg"
         suffix = damage_location or "other"
         filename = build_filename(loaner, itype, ext, suffix=suffix)
-        mimetype = "image/jpeg"
         folder_hint = "damage"
 
-    # Upload through abstraction layer
+    # 4. Upload file using storage backend
     backend = await get_storage_backend(db)
-    result  = await backend.upload_file(content, filename, mimetype, folder_hint)
+    result  = await backend.upload_file(content, filename, content_type, folder_hint)
 
-    # Persist file reference on inspection/damage record
+    # Persist video URL on the inspection record
     if result.success and media_type == "video" and result.file_id:
         await set_video_url(db, inspection_id, result.file_id, result.file_url)
 
     if not result.success and result.backend == "local" and not result.file_id:
         raise HTTPException(status_code=502, detail="Upload failed on all backends")
 
-    # Insert inspection_media record for every successful upload
-    # Determine media type from content_type
-    content_type = (file.content_type or "").lower()
-    if content_type.startswith("image/"):
-        record_media_type = "photo"
-    elif content_type.startswith("video/"):
-        record_media_type = "video"
-    else:
-        record_media_type = media_type  # fallback to query param
-
+    # 5. Insert media record
     file_url_to_store = result.file_url or result.file_id or filename
-    if file_url_to_store:
-        from models.inspection_media import InspectionMedia
-        from utils.time import utcnow as _utcnow
-        db.add(InspectionMedia(
-            inspection_id=inspection_id,
-            file_url=file_url_to_store,
-            media_type=record_media_type,
-            created_at=_utcnow(),
-        ))
+    db.add(InspectionMedia(
+        inspection_id=inspection_id,
+        file_url=file_url_to_store,
+        media_type=media_type,
+        created_at=_utcnow(),
+    ))
     await db.commit()
 
     return UploadResponse(
