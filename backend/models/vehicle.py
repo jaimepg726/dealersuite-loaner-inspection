@@ -46,6 +46,7 @@ class Vehicle(Base):
     plate: Mapped[str | None]        = mapped_column(String(20), nullable=True)
     mileage: Mapped[int | None]      = mapped_column(Integer, nullable=True)
     color:   Mapped[str | None]      = mapped_column(String(30), nullable=True)
+    fuel_level: Mapped[str | None]   = mapped_column(String(10), nullable=True)
 
     # Status / type  (String to match migration — enums used for validation only)
     status: Mapped[str] = mapped_column(
