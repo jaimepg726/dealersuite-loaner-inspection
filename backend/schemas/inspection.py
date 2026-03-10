@@ -21,6 +21,16 @@ class InspectionComplete(BaseModel):
     notes:       Optional[str] = None
 
 
+class MediaItem(BaseModel):
+    id:         int
+    file_url:   str
+    media_type: str  # "photo" | "video"
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class InspectionResponse(BaseModel):
     id:               int
     vehicle_id:       int
@@ -36,6 +46,9 @@ class InspectionResponse(BaseModel):
 
     # Nested damages (loaded when viewing a single inspection)
     damages: list[DamageResponse] = []
+
+    # Inspection media (photos + videos)
+    media: list[MediaItem] = []
 
     class Config:
         from_attributes = True

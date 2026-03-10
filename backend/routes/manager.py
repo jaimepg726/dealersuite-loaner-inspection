@@ -73,13 +73,15 @@ async def route_list_inspections(
 @router.get(
     "/inspections/{inspection_id}",
     response_model=InspectionResponse,
-    summary="Get inspection detail with damages",
+    summary="Get inspection detail with damages and media",
 )
 async def route_get_inspection(
     inspection_id: int,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_manager),
 ):
+    # Returns vehicle info, loaner number, inspection type, porter name,
+    # damage notes, and media array (photos + videos) via the ORM relationship.
     return await get_inspection_by_id(db, inspection_id)
 
 

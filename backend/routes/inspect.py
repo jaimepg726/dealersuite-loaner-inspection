@@ -143,9 +143,29 @@ async def upload_media(
     if hasattr(itype, "value"):
         itype = itype.value
 
+    ALLOWED_VIDEO_MIMETYPES = {
+        "video/mp4",
+        "video/quicktime",
+        "video/webm",
+        "video/x-msvideo",
+    }
+
     if media_type == "video":
-        filename = build_filename(loaner, itype, "mp4")
-        mimetype = "video/mp4"
+        detected = (file.content_type or "").lower()
+        if detected not in ALLOWED_VIDEO_MIMETYPES:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Unsupported video type '{detected}'. Allowed: {', '.join(sorted(ALLOWED_VIDEO_MIMETYPES))}",
+            )
+        ext_map = {
+            "video/mp4": "mp4",
+            "video/quicktime": "mov",
+            "video/webm": "webm",
+            "video/x-msvideo": "avi",
+        }
+        ext = ext_map.get(detected, "mp4")
+        filename = build_filename(loaner, itype, ext)
+        mimetype = detected
         folder_hint = "inspections"
     else:
         ext = "jpg"
@@ -161,10 +181,31 @@ async def upload_media(
     # Persist file reference on inspection/damage record
     if result.success and media_type == "video" and result.file_id:
         await set_video_url(db, inspection_id, result.file_id, result.file_url)
-        await db.commit()
 
     if not result.success and result.backend == "local" and not result.file_id:
         raise HTTPException(status_code=502, detail="Upload failed on all backends")
+
+    # Insert inspection_media record for every successful upload
+    # Determine media type from content_type
+    content_type = (file.content_type or "").lower()
+    if content_type.startswith("image/"):
+        record_media_type = "photo"
+    elif content_type.startswith("video/"):
+        record_media_type = "video"
+    else:
+        record_media_type = media_type  # fallback to query param
+
+    file_url_to_store = result.file_url or result.file_id or filename
+    if file_url_to_store:
+        from models.inspection_media import InspectionMedia
+        from backend.utils.time import utcnow as _utcnow
+        db.add(InspectionMedia(
+            inspection_id=inspection_id,
+            file_url=file_url_to_store,
+            media_type=record_media_type,
+            created_at=_utcnow(),
+        ))
+    await db.commit()
 
     return UploadResponse(
         file_id=result.file_id,
