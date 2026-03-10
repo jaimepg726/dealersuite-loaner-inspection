@@ -17,6 +17,7 @@ class VehicleBase(BaseModel):
     plate:         Optional[str] = None
     mileage:       Optional[int] = None
     color:         Optional[str] = None
+    fuel_level:    Optional[str] = None
     status:        str = "Active"
     vehicle_type:  str = "Loaner"
 
@@ -45,12 +46,13 @@ class VehicleUpdate(BaseModel):
     plate:         Optional[str]  = None
     mileage:       Optional[int]  = None
     color:         Optional[str]  = None
+    fuel_level:    Optional[str]  = None
     status:        Optional[str]  = None
     vehicle_type:  Optional[str]  = None
 
 
 class VehicleResponse(VehicleBase):
-    id:               int
+    id:              int
     is_active:        bool
     drive_folder_url: Optional[str] = None
     created_at:       datetime
