@@ -129,10 +129,43 @@ function DriveSection() {
             <p className="text-gray-500 text-xs mt-0.5">
               {status?.connected
                 ? 'Token needs refresh — reconnect to restore Drive uploads'
-                : 'Conected ? 'text-green-400' : status?.connected ? 'text-yellow-400' : 'text-gray-400'
-            }`}>
-              {connected ? 'Drive Connected' : status?.connected ? 'Token Expired' : 'Not Connected'}
-            </span>
+                : 'Connect Google Drive to store inspection videos & damage photos'}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Test result */}
+      {testResult && (
+        <div className={`rounded-xl px-4 py-3 text-xs font-medium ${
+          testResult.healthy
+            ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+        }`}>
+          {testResult.healthy
+            ? <CheckCircle className="w-3 h-3 shrink-0" />
+            : <AlertTriangle className="w-3 h-3 shrink-0" />
+          }
+          <span>
+            {testResult.healthy
+              ? `Drive OK - ${testResult.files_count} files, folder: ${testResult.folder_name}`
+              : testResult.error
+            }
+          </span>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2 flex-wrap">
+        {!connected && (
+          <button
+            onClick={handleConnect}
+            className="btn-primary flex items-center gap-2 text-sm"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Connect Google Drive
+          </button>
+        )}
           </div>
 
           {connected && (
@@ -150,7 +183,7 @@ function DriveSection() {
           {!connected && (
             <p className="text-gray-500 text-xs mt-0.5">
               {status?.connected
-                ? 'Token needs refresh — reconnect to restore Drive uploads'
+                ? 'Token needs refresh  -  reconnect to restore Drive uploads'
                 : 'Connect Google Drive to store inspection videos & damage photos'}
             </p>
           )}
