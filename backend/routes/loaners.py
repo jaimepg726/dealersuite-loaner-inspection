@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from backend.utils.time import utcnow
+from utils.time import utcnow
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from dependencies import get_db, get_current_user

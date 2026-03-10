@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.utils.time import utcnow
+from utils.time import utcnow
 from database import get_db
 from dependencies import require_manager
 from models.vehicle import Vehicle

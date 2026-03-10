@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Enum as SAEnum, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
-from backend.utils.time import utcnow
+from utils.time import utcnow
 import enum
 
 class LoanerStatus(str, enum.Enum):

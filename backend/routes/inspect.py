@@ -198,7 +198,7 @@ async def upload_media(
     file_url_to_store = result.file_url or result.file_id or filename
     if file_url_to_store:
         from models.inspection_media import InspectionMedia
-        from backend.utils.time import utcnow as _utcnow
+        from utils.time import utcnow as _utcnow
         db.add(InspectionMedia(
             inspection_id=inspection_id,
             file_url=file_url_to_store,
