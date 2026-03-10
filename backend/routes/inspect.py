@@ -143,9 +143,29 @@ async def upload_media(
     if hasattr(itype, "value"):
         itype = itype.value
 
+    ALLOWED_VIDEO_MIMETYPES = {
+        "video/mp4",
+        "video/quicktime",
+        "video/webm",
+        "video/x-msvideo",
+    }
+
     if media_type == "video":
-        filename = build_filename(loaner, itype, "mp4")
-        mimetype = "video/mp4"
+        detected = (file.content_type or "").lower()
+        if detected not in ALLOWED_VIDEO_MIMETYPES:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Unsupported video type '{detected}'. Allowed: {', '.join(sorted(ALLOWED_VIDEO_MIMETYPES))}",
+            )
+        ext_map = {
+            "video/mp4": "mp4",
+            "video/quicktime": "mov",
+            "video/webm": "webm",
+            "video/x-msvideo": "avi",
+        }
+        ext = ext_map.get(detected, "mp4")
+        filename = build_filename(loaner, itype, ext)
+        mimetype = detected
         folder_hint = "inspections"
     else:
         ext = "jpg"

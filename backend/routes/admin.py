@@ -3,12 +3,13 @@ POST /api/admin/demo/enable   -> insert demo records (is_demo=true)
 POST /api/admin/demo/disable  -> delete all demo records
 GET  /api/admin/demo/status   -> {demo_mode: bool}
 """
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.utils.time import utcnow
 from database import get_db
 from dependencies import require_manager
 from models.vehicle import Vehicle
@@ -70,7 +71,7 @@ async def demo_enable(
     if existing.scalar_one() > 0:
         return {"detail": "Demo mode already active"}
 
-    now = datetime.now(timezone.utc)
+    now = utcnow()
 
     # Insert vehicles
     vehicles = []
