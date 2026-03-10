@@ -54,3 +54,20 @@ async def run_migrations(engine: AsyncEngine) -> None:
             logger.info("Migration OK: %s", ddl[:80])
         except Exception as exc:
             logger.warning("Migration skipped (already applied?): %s", exc)
+
+    # Purge stale media records created before DB storage was implemented.
+    # Rows with a /tmp path, null file_data, or tiny blobs (< 100 bytes) are
+    # leftovers that can never be served correctly.
+    _CLEANUP = """
+        DELETE FROM inspection_media
+        WHERE file_url NOT LIKE '/api/media/%'
+           OR file_data IS NULL
+           OR length(file_data) < 100
+    """
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(text(_CLEANUP))
+            if result.rowcount:
+                logger.info("Migration cleanup: removed %d stale inspection_media rows", result.rowcount)
+    except Exception as exc:
+        logger.warning("Migration cleanup skipped: %s", exc)

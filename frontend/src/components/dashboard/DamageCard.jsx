@@ -97,16 +97,20 @@ export default function DamageCard({ damage, onUpdated }) {
       {expanded && (
         <div className="mt-4 pt-4 border-t border-brand-accent flex flex-col gap-4">
 
-          {/* Photo link */}
-          {damage.photo_url && (
-            <a
-              href={damage.photo_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-brand-blue text-sm font-semibold"
-            >
-              <ExternalLink className="w-4 h-4" /> View Damage Photo
-            </a>
+          {/* Inspection photos linked to this damage */}
+          {damage.media?.filter(m => m.media_type === 'photo' || m.type === 'photo').length > 0 && (
+            <div className="flex flex-col gap-2">
+              {damage.media
+                .filter(m => m.media_type === 'photo' || m.type === 'photo')
+                .map(m => (
+                  <img
+                    key={m.id}
+                    src={m.file_url || m.url}
+                    alt="Damage photo"
+                    className="w-full rounded-xl border border-brand-accent object-cover max-h-56"
+                  />
+                ))}
+            </div>
           )}
 
           {/* Full description */}

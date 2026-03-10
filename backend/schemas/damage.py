@@ -7,6 +7,17 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class DamageMediaItem(BaseModel):
+    """A photo from the parent inspection, shown on the damage card."""
+    id:         int
+    file_url:   str
+    media_type: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class DamageCreate(BaseModel):
     inspection_id:  int
     location:       Optional[str] = None
@@ -43,6 +54,7 @@ class DamageResponse(BaseModel):
     manager_notes: Optional[str] = None
     created_at:    datetime
     updated_at:    datetime
+    media:         list[DamageMediaItem] = []
 
     class Config:
         from_attributes = True
