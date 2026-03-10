@@ -137,63 +137,11 @@ function DriveSection() {
 
       {/* Test result */}
       {testResult && (
-        <div className={`rounded-xl px-4 py-3 text-xs font-medium ${
+        <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${
           testResult.healthy
             ? 'bg-green-500/10 text-green-400 border border-green-500/20'
             : 'bg-red-500/10 text-red-400 border border-red-500/20'
         }`}>
-          {testResult.healthy
-            ? <CheckCircle className="w-3 h-3 shrink-0" />
-            : <AlertTriangle className="w-3 h-3 shrink-0" />
-          }
-          <span>
-            {testResult.healthy
-              ? `Drive OK - ${testResult.files_count} files, folder: ${testResult.folder_name}`
-              : testResult.error
-            }
-          </span>
-        </div>
-      )}
-
-      {/* Action buttons */}
-      <div className="flex gap-2 flex-wrap">
-        {!connected && (
-          <button
-            onClick={handleConnect}
-            className="btn-primary flex items-center gap-2 text-sm"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Connect Google Drive
-          </button>
-        )}
-          </div>
-
-          {connected && (
-            <>
-              <p className="text-gray-400 text-xs mt-0.5 truncate">{status.email}</p>
-              <p className="text-gray-500 text-xs truncate">
-                Folder: {status.folder_name}
-              </p>
-              <p className="text-gray-600 text-xs">
-                Mode: <span className="text-green-400 font-semibold">Google Drive</span>
-              </p>
-            </>
-          )}
-
-          {!connected && (
-            <p className="text-gray-500 text-xs mt-0.5">
-              {status?.connected
-                ? 'Token needs refresh  -  reconnect to restore Drive uploads'
-                : 'Connect Google Drive to store inspection videos & damage photos'}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Test result banner */}
-      {testResult && (
-        <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs
-          ${testResult.healthy ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
           {testResult.healthy
             ? <CheckCircle className="w-3 h-3 shrink-0" />
             : <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -243,34 +191,14 @@ function DriveSection() {
   )
 }
 
-// ── Add-User modal ─────────────────────────────────────────────────────────
+// ── Add-User modal ────────────────────────────────────────────────────────────
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'porter' }
+
 function AddUserModal({ onClose, onCreated }) {
   const [form,    setForm]    = useState(EMPTY_FORM)
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState(null)
   const [showPw,  setShowPw]  = useState(false)
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!form.name.trim() || !form.email.trim() || !form.password) {
-      setError('Name, email, and password are required.')
-      return
-    }
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {d User modal ─────────────────────────────────────────────────────────────
-const EMPTY_FORM = { name: '', email: '', password: '', role: 'porter' }
-
-function AddUserModal({ onClose, onCreated }) {
-  const [form,   setForm]   = useState(EMPTY_FORM)
-  const [busy,   setBusy]   = useState(false)
-  const [error,  setError]  = useState(null)
-  const [showPw, setShowPw] = useState(false)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
