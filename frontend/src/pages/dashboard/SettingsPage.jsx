@@ -53,7 +53,12 @@ function DriveSection() {
   }, [load])
 
   async function handleConnect() {
-    window.location.href = '/api/auth/google/connect'
+    const res = await fetch('/api/auth/google/connect', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('ds_token')}` },
+      redirect: 'manual',
+    })
+    const redirectUrl = res.headers.get('location') || res.url
+    window.location.href = redirectUrl
   }
 
   async function handleTest() {

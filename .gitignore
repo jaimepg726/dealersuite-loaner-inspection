@@ -7,19 +7,18 @@ __pycache__/
 venv/
 env/
 *.egg-info/
-dist/
 build/
 .pytest_cache/
 
 # Node / React
 node_modules/
-dist/
 .vite/
+# frontend/dist is committed so Railway always serves the latest bundle
+!frontend/dist
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-frontend/dist/
 
 # Database
 *.db
