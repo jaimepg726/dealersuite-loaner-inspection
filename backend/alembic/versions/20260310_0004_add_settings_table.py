@@ -19,7 +19,7 @@ def upgrade():
         sa.Column('key', sa.String(120), nullable=False, unique=True),
         sa.Column('value', sa.Text(), nullable=True),
         sa.Column('created_at',sa.DateTime(timezone=True),nullable=False,server_default=sa.func.now()),
-        sa.Column('updated_at',sa.DateTime(timezone=True),unullable=False,server_default=sa.func.now()),
+        sa.Column('updated_at',sa.DateTime(timezone=True),nullable=False,server_default=sa.func.now()),
     )
     op.create_index('ix_app_settings_key','app_settings',['key'],unique=True)
 
