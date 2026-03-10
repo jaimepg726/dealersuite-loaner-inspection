@@ -3,14 +3,14 @@
  * Fixed to the bottom of the screen — large tap targets.
  */
 import { NavLink } from 'react-router-dom'
-import { Car, ClipboardList, AlertTriangle, BarChart2, Settings } from 'lucide-react'
+import { Car, ClipboardList, AlertTriangle, BarChart2, Settings, KeyRound } from 'lucide-react'
 
 const TABS = [
-  { to: '/dashboard/fleet',    label: 'Fleet',      Icon: Car            },
+  { to: '/dashboard/fleet',    label: 'Fleet',       Icon: Car            },
   { to: '/dashboard',          label: 'Inspections', Icon: ClipboardList  },
-  { to: '/dashboard/damage',   label: 'Damage',     Icon: AlertTriangle  },
-  { to: '/dashboard/reports',  label: 'Reports',    Icon: BarChart2      },
-  { to: '/dashboard/settings', label: 'Settings',   Icon: Settings       },
+  { to: '/dashboard/loaners',  label: 'Loaners',     Icon: KeyRound       },
+  { to: '/dashboard/damage',   label: 'Damage',      Icon: AlertTriangle  },
+  { to: '/dashboard/settings', label: 'Settings',    Icon: Settings       },
 ]
 
 export default function BottomNav() {
