@@ -1,9 +1,9 @@
 /**
- * DealerSuite — Inspection Card
+ * DealerSuite — Inspection Card (Step 50)
  * Single row in the inspections list.
- * Tapping opens the Drive folder link if available.
+ * Shows Drive/local storage badge based on drive_folder_url.
  */
-import { ExternalLink, Camera, AlertTriangle } from 'lucide-react'
+import { ExternalLink, Camera, AlertTriangle, HardDrive, HardDriveDownload } from 'lucide-react'
 
 const TYPE_COLOR = {
   Checkout:  'bg-brand-blue/20 text-brand-blue',
@@ -28,6 +28,7 @@ export default function InspectionCard({ inspection }) {
   const { vehicle } = inspection
   const typeCls   = TYPE_COLOR[inspection.inspection_type]   || TYPE_COLOR.Checkout
   const statusCls = STATUS_COLOR[inspection.status]          || 'text-gray-400'
+  const onDrive   = !!inspection.drive_folder_url
 
   return (
     <div className="card hover:border-brand-blue/40 transition-colors">
@@ -70,6 +71,16 @@ export default function InspectionCard({ inspection }) {
             {inspection.damages?.length > 0 && (
               <span className="flex items-center gap-1 text-xs text-yellow-500">
                 <AlertTriangle className="w-3 h-3" /> {inspection.damages.length} damage
+              </span>
+            )}
+            {/* Storage badge (Step 50) */}
+            {onDrive ? (
+              <span className="flex items-center gap-1 text-xs text-green-500" title="Stored in Google Drive">
+                <HardDrive className="w-3 h-3" /> Drive
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs text-gray-600" title="Stored locally">
+                <HardDriveDownload className="w-3 h-3" /> Local
               </span>
             )}
           </div>

@@ -1,15 +1,16 @@
 /**
- * DealerSuite - Manager Settings Page (Batch 3)
+ * DealerSuite - Manager Settings Page (Batch 3+)
  * Sections:
- *  1. Google Drive - OAuth connect/disconnect, health test
+ *  1. Google Drive  - OAuth connect/disconnect, health test
  *  2. User Management
- *  3. App Info
+ *  3. Loaner Configuration
+ *  4. App Info
  */
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Settings, RefreshCw, HardDrive, CheckCircle, AlertTriangle,
+  RefreshCw, HardDrive, CheckCircle, AlertTriangle,
   UserPlus, Users, X, Eye, EyeOff, ExternalLink, Unlink, Zap,
-  WifiOff, CloudOff,
+  CloudOff, SlidersHorizontal,
 } from 'lucide-react'
 import api from '../../utils/api'
 import { useAuth } from '../../context/AuthContext'
@@ -23,9 +24,9 @@ function SectionTitle({ children }) {
   )
 }
 
-// ── Drive status card ─────────────────────────────────────────────────────────
+// ── Drive status card ──────────────────────────────────────────────────────────
 function DriveSection() {
-  const [status,  setStatus]  = useState(null)
+  const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
@@ -45,7 +46,6 @@ function DriveSection() {
 
   useEffect(() => {
     load()
-    // Check if we just returned from OAuth
     const params = new URLSearchParams(window.location.search)
     if (params.get('drive') === 'connected') {
       window.history.replaceState({}, '', window.location.pathname)
@@ -94,8 +94,7 @@ function DriveSection() {
     <div className="card flex flex-col gap-4">
       {/* Header row */}
       <div className="flex items-start gap-3">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0
-          ${connected ? 'bg-green-500/10' : 'bg-brand-accent'}`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${connected ? 'bg-green-500/10' : 'bg-brand-accent'}`}>
           <HardDrive className={`w-6 h-6 ${connected ? 'text-green-400' : 'text-gray-400'}`} />
         </div>
         <div className="flex-1 min-w-0">
@@ -112,19 +111,15 @@ function DriveSection() {
               {connected ? 'Drive Connected' : status?.connected ? 'Token Expired' : 'Not Connected'}
             </span>
           </div>
-
           {connected && (
             <>
               <p className="text-gray-400 text-xs mt-0.5 truncate">{status.email}</p>
-              <p className="text-gray-500 text-xs truncate">
-                Folder: {status.folder_name}
-              </p>
+              <p className="text-gray-500 text-xs truncate">Folder: {status.folder_name}</p>
               <p className="text-gray-600 text-xs">
                 Mode: <span className="text-green-400 font-semibold">Google Drive</span>
               </p>
             </>
           )}
-
           {!connected && (
             <p className="text-gray-500 text-xs mt-0.5">
               {status?.connected
@@ -137,7 +132,7 @@ function DriveSection() {
 
       {/* Test result */}
       {testResult && (
-        <div className={`rounded-xl px-4 py-3 text-xs font-medium ${
+        <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-medium ${
           testResult.healthy
             ? 'bg-green-500/10 text-green-400 border border-green-500/20'
             : 'bg-red-500/10 text-red-400 border border-red-500/20'
@@ -148,128 +143,65 @@ function DriveSection() {
           }
           <span>
             {testResult.healthy
-              ? `Drive OK - ${testResult.files_count} files, folder: ${testResult.folder_name}`
-              : testResult.error
-            }
+              ? `Health check passed — connected as ${testResult.drive_account || status?.email}`
+              : `Health check failed: ${testResult.error}`}
           </span>
         </div>
       )}
 
       {/* Action buttons */}
       <div className="flex gap-2 flex-wrap">
-        {!connected && (
+        {!connected ? (
           <button
             onClick={handleConnect}
-            className="btn-primary flex items-center gap-2 text-sm"
+            className="flex items-center gap-2 bg-brand-blue text-white text-sm font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform"
           >
-            <ExternalLink className="w-4 h-4" />
+            <HardDrive className="w-4 h-4" />
             Connect Google Drive
           </button>
+        ) : (
+          <>
+            <button
+              onClick={handleTest}
+              disabled={testing}
+              className="flex items-center gap-2 bg-brand-mid border border-brand-accent text-gray-300 text-sm font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform disabled:opacity-50"
+            >
+              {testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+              {testing ? 'Testing...' : 'Test Connection'}
+            </button>
+            <button
+              onClick={handleRevoke}
+              disabled={revoking}
+              className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform disabled:opacity-50"
+            >
+              <Unlink className="w-3.5 h-3.5" />
+              Disconnect
+            </button>
+          </>
         )}
-          </div>
-
-          {connected && (
-            <>
-              <p className="text-gray-400 text-xs mt-0.5 truncate">{status.email}</p>
-              <p className="text-gray-500 text-xs truncate">
-                Folder: {status.folder_name}
-              </p>
-              <p className="text-gray-600 text-xs">
-                Mode: <span className="text-green-400 font-semibold">Google Drive</span>
-              </p>
-            </>
-          )}
-
-          {!connected && (
-            <p className="text-gray-500 text-xs mt-0.5">
-              {status?.connected
-                ? 'Token needs refresh  -  reconnect to restore Drive uploads'
-                : 'Connect Google Drive to store inspection videos & damage photos'}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Test result banner */}
-      {testResult && (
-        <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs
-          ${testResult.healthy ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
-          {testResult.healthy
-            ? <CheckCircle className="w-3 h-3 shrink-0" />
-            : <AlertTriangle className="w-3 h-3 shrink-0" />
-          }
-          <span>
-            {testResult.healthy
-              ? `Drive OK - ${testResult.files_count} files, folder: ${testResult.folder_name}`
-              : testResult.error
-            }
-          </span>
-        </div>
-      )}
-
-      {/* Action buttons */}
-      <div className="flex gap-2 flex-wrap">
-        {!connected && (
-          <button
-            onClick={handleConnect}
-            className="btn-primary flex items-center gap-2 text-sm"
+        {status?.root_folder_id && (
+          <a
+            href={`https://drive.google.com/drive/folders/${status.root_folder_id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-brand-mid border border-brand-accent text-gray-400 text-sm font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform"
           >
-            <ExternalLink className="w-4 h-4" />
-            Connect Google Drive
-          </button>
-        )}
-        {connected && (
-          <button
-            onClick={handleTest}
-            disabled={testing}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
-            <Zap className="w-4 h-4" />
-            {testing ? 'Testing...' : 'Test Connection'}
-          </button>
-        )}
-        {connected && (
-          <button
-            onClick={handleRevoke}
-            disabled={revoking}
-            className="btn-danger flex items-center gap-2 text-sm"
-          >
-            <Unlink className="w-4 h-4" />
-            {revoking ? 'Disconnecting...' : 'Disconnect'}
-          </button>
+            <ExternalLink className="w-3.5 h-3.5" />
+            Open in Drive
+          </a>
         )}
       </div>
     </div>
   )
 }
 
-// ── Add-User modal ─────────────────────────────────────────────────────────
-const EMPTY_FORM = { name: '', email: '', password: '', role: 'porter' }
-function AddUserModal({ onClose, onCreated }) {
-  const [form,    setForm]    = useState(EMPTY_FORM)
-  const [busy,    setBusy]    = useState(false)
-  const [error,   setError]   = useState(null)
-  const [showPw,  setShowPw]  = useState(false)
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!form.name.trim() || !form.email.trim() || !form.password) {
-      setError('Name, email, and password are required.')
-      return
-    }
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {d User modal ─────────────────────────────────────────────────────────────
+// ── Add User modal ─────────────────────────────────────────────────────────────
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'porter' }
 
 function AddUserModal({ onClose, onCreated }) {
-  const [form,   setForm]   = useState(EMPTY_FORM)
-  const [busy,   setBusy]   = useState(false)
-  const [error,  setError]  = useState(null)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
   const [showPw, setShowPw] = useState(false)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -340,8 +272,9 @@ function AddUserModal({ onClose, onCreated }) {
             <div className="flex gap-2">
               {['porter', 'manager'].map((r) => (
                 <button key={r} type="button" onClick={() => setForm((f) => ({ ...f, role: r }))}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors
-                    ${form.role === r ? 'bg-brand-blue border-brand-blue text-white' : 'bg-brand-mid border-brand-accent text-gray-400'}`}>
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors ${
+                    form.role === r ? 'bg-brand-blue border-brand-blue text-white' : 'bg-brand-mid border-brand-accent text-gray-400'
+                  }`}>
                   {r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
@@ -351,7 +284,7 @@ function AddUserModal({ onClose, onCreated }) {
           <button type="submit" disabled={busy}
             className="w-full py-4 bg-brand-blue text-white rounded-2xl font-extrabold text-base active:scale-[.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 mt-1">
             {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-            {busy ? 'Creating…' : 'Create Account'}
+            {busy ? 'Creating...' : 'Create Account'}
           </button>
         </form>
       </div>
@@ -359,15 +292,93 @@ function AddUserModal({ onClose, onCreated }) {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Loaner Configuration section ──────────────────────────────────────────────
+function LoanerConfigSection() {
+  const [config, setConfig] = useState({ reminder_interval_days: 7, fuel_threshold_pct: 25 })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    api.get('/api/manager/config')
+      .then(({ data }) => setConfig(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    setSaved(false)
+    try {
+      await api.post('/api/manager/config', config)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      alert('Could not save configuration')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="card h-24 animate-pulse bg-brand-mid" />
+
+  return (
+    <div className="card flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-semibold text-gray-400">
+          Inspection Reminder Interval (days)
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={90}
+          value={config.reminder_interval_days}
+          onChange={(e) => setConfig((c) => ({ ...c, reminder_interval_days: Number(e.target.value) }))}
+          className="w-full bg-brand-mid border border-brand-accent rounded-xl px-4 py-3 text-sm text-brand-white focus:outline-none focus:border-brand-blue"
+        />
+        <p className="text-gray-600 text-xs mt-0.5">Alert when a loaner has not been inspected within this many days</p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-gray-400">Fuel Threshold Alert</label>
+          <span className="text-brand-yellow text-sm font-bold">{config.fuel_threshold_pct}%</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={config.fuel_threshold_pct}
+          onChange={(e) => setConfig((c) => ({ ...c, fuel_threshold_pct: Number(e.target.value) }))}
+          className="w-full accent-brand-yellow"
+        />
+        <p className="text-gray-600 text-xs">Show fuel warning when vehicle returns below this level</p>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className={`flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-all active:scale-95 disabled:opacity-50 ${
+          saved ? 'bg-green-500/20 border border-green-500/30 text-green-400' : 'bg-brand-blue text-white'
+        }`}
+      >
+        {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <SlidersHorizontal className="w-3.5 h-3.5" />}
+        {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Configuration'}
+      </button>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { user: me } = useAuth()
-  const [users,        setUsers]        = useState([])
-  const [usersTotal,   setUsersTotal]   = useState(0)
+  const [users, setUsers] = useState([])
+  const [usersTotal, setUsersTotal] = useState(0)
   const [usersLoading, setUsersLoading] = useState(true)
-  const [usersError,   setUsersError]   = useState(null)
+  const [usersError, setUsersError] = useState(null)
   const [showInactive, setShowInactive] = useState(false)
-  const [roleFilter,   setRoleFilter]   = useState('All')
+  const [roleFilter, setRoleFilter] = useState('All')
   const [showAddModal, setShowAddModal] = useState(false)
 
   const loadUsers = useCallback(async () => {
@@ -430,7 +441,7 @@ export default function SettingsPage() {
               { label: 'Managers', value: managerCount, color: 'text-purple-400'  },
             ].map(({ label, value, color }) => (
               <div key={label} className="card py-3 text-center">
-                <p className={`text-2xl font-extrabold ${color}`}>{usersLoading ? '…' : value}</p>
+                <p className={`text-2xl font-extrabold ${color}`}>{usersLoading ? '...' : value}</p>
                 <p className="text-gray-500 text-xs mt-0.5">{label}</p>
               </div>
             ))}
@@ -439,14 +450,16 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             {['All', 'Porter', 'Manager'].map((r) => (
               <button key={r} onClick={() => setRoleFilter(r)}
-                className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors
-                  ${roleFilter === r ? 'bg-brand-yellow border-yellow-600 text-black' : 'bg-brand-mid border-brand-accent text-gray-400'}`}>
+                className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                  roleFilter === r ? 'bg-brand-yellow border-yellow-600 text-black' : 'bg-brand-mid border-brand-accent text-gray-400'
+                }`}>
                 {r}
               </button>
             ))}
             <button onClick={() => setShowInactive(!showInactive)}
-              className={`ml-auto text-xs font-bold px-3 py-1.5 rounded-full border transition-colors
-                ${showInactive ? 'bg-brand-yellow border-yellow-600 text-black' : 'bg-brand-mid border-brand-accent text-gray-400'}`}>
+              className={`ml-auto text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                showInactive ? 'bg-brand-yellow border-yellow-600 text-black' : 'bg-brand-mid border-brand-accent text-gray-400'
+              }`}>
               {showInactive ? 'Hide inactive' : 'Show inactive'}
             </button>
           </div>
@@ -470,6 +483,12 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Loaner Configuration */}
+        <div>
+          <SectionTitle>Loaner Configuration</SectionTitle>
+          <LoanerConfigSection />
         </div>
 
         {/* App Info */}

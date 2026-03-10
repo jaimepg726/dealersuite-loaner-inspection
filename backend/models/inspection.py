@@ -61,6 +61,11 @@ class Inspection(Base):
     video_url:        Mapped[str | None] = mapped_column(String(500), nullable=True)
     video_drive_id:   Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    # Storage backend tracking (Step 48)
+    storage_key:     Mapped[str | None] = mapped_column(String(500), nullable=True)   # Drive file ID or local path
+    storage_backend: Mapped[str] = mapped_column(String(20), default="local", nullable=False)
+    public_url:      Mapped[str | None] = mapped_column(String(500), nullable=True)   # Shareable Drive URL
+
     # Media counts
     photo_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

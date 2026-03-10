@@ -33,6 +33,10 @@ class InspectionResponse(BaseModel):
     notes:            Optional[str]  = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
+    # Storage backend fields (Step 48)
+    storage_key:     Optional[str] = None
+    storage_backend: str = 'local'
+    public_url:      Optional[str] = None
 
     # Nested damages (loaded when viewing a single inspection)
     damages: list[DamageResponse] = []
@@ -52,6 +56,9 @@ class InspectionSummary(BaseModel):
     drive_folder_url: Optional[str] = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
+    # Storage backend fields (Step 48)
+    storage_backend: str = 'local'
+    public_url:      Optional[str] = None
 
     class Config:
         from_attributes = True

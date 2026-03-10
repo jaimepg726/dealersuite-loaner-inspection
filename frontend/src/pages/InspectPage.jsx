@@ -1,14 +1,14 @@
 /**
- * DealerSuite — Inspection Page
+ * DealerSuite — Inspection Page (Step 49)
  *
  * Full inspection flow orchestrator.
  *
  * Phases:
- *   init       → API start + Drive folder creation (from Stage 8)
+ *   init       → API start + Drive folder creation
  *   recording  → VideoRecorder walkround
  *   damage     → DamageLogger
  *   uploading  → UploadProgress (video → photos → damage records → complete)
- *   done       → Success screen with Drive folder link
+ *   done       → Success screen with Drive folder link + storage badge
  *   error      → Fatal error (API down, no vehicle, etc.)
  */
 import { useEffect, useState, useRef } from 'react'
@@ -19,6 +19,8 @@ import {
   AlertCircle,
   ExternalLink,
   Home,
+  HardDrive,
+  HardDriveDownload,
 } from 'lucide-react'
 import api            from '../utils/api'
 import PageHeader     from '../components/ui/PageHeader'
@@ -52,6 +54,25 @@ function makeSteps(hasVideo, photoCount) {
   return steps
 }
 
+// ── Storage badge ─────────────────────────────────────────────────────────────
+function StorageBadge({ backend }) {
+  if (!backend) return null
+  if (backend === 'drive') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2.5 py-1 rounded-full">
+        <HardDrive className="w-3 h-3" />
+        Saved to Drive
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-400 bg-gray-400/10 border border-gray-400/20 px-2.5 py-1 rounded-full">
+      <HardDriveDownload className="w-3 h-3" />
+      Saved locally
+    </span>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function InspectPage() {
   const { type, vehicleId } = useParams()
@@ -64,10 +85,11 @@ export default function InspectPage() {
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
   const apiType  = TYPE_API_MAP[type] || 'Checkout'
 
-  const [phase,       setPhase]       = useState('init')
-  const [uploadSteps, setUploadSteps] = useState([])
-  const [uploadPct,   setUploadPct]   = useState(0)
-  const [uploadError, setUploadError] = useState(null)
+  const [phase,         setPhase]         = useState('init')
+  const [uploadSteps,   setUploadSteps]   = useState([])
+  const [uploadPct,     setUploadPct]     = useState(0)
+  const [uploadError,   setUploadError]   = useState(null)
+  const [uploadBackend, setUploadBackend] = useState(null)  // 'drive' | 'local'
 
   // Media captured during recording — held in refs to avoid stale closures
   const videoBlobRef  = useRef(null)
@@ -110,6 +132,7 @@ export default function InspectPage() {
     const steps = makeSteps(!!videoBlob, photoCount)
     setUploadSteps([...steps])
     setUploadError(null)
+    setUploadBackend(null)
     setPhase('uploading')
 
     let si = 0  // step index
@@ -122,7 +145,8 @@ export default function InspectPage() {
       if (videoBlob) {
         mark('active')
         try {
-          await uploadFile(videoBlob, 'video')
+          const res = await uploadFile(videoBlob, 'video')
+          if (res?.backend) setUploadBackend(res.backend)
         } catch {
           console.warn('Video upload skipped — Drive may not be configured')
         }
@@ -144,6 +168,7 @@ export default function InspectPage() {
             const res = await uploadFile(d.photoBlob, 'photo', d.location || 'other')
             photoUrl     = res?.file_url ?? null
             photoDriveId = res?.file_id  ?? null
+            if (res?.backend && !uploadBackend) setUploadBackend(res.backend)
           } catch {
             // log damage without photo rather than abort
           }
@@ -165,7 +190,6 @@ export default function InspectPage() {
       if (!inspection) throw new Error('Inspection not found')
 
       // Items without photos saved as-is; items with photos use the uploaded URL
-      const photoDmgLocations = new Set(photoDmg.map(d => d.location + d.description))
       const textOnlyDamages = damages
         .filter(d => !d.photoBlob)
         .map(d => ({
@@ -208,7 +232,7 @@ export default function InspectPage() {
       <FullScreenShell title={typeInfo.label} showBack>
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <Loader className="w-12 h-12 text-brand-blue animate-spin" />
-          <p className="text-gray-400 font-semibold">Starting inspection…</p>
+          <p className="text-gray-400 font-semibold">Starting inspection...</p>
         </div>
       </FullScreenShell>
     )
@@ -249,6 +273,9 @@ export default function InspectPage() {
             </p>
           </div>
 
+          {/* Storage backend badge (Step 49) */}
+          <StorageBadge backend={uploadBackend} />
+
           {inspection?.drive_folder_url && (
             <a
               href={inspection.drive_folder_url}
@@ -287,7 +314,7 @@ export default function InspectPage() {
   const phaseTitle = {
     recording: typeInfo.label,
     damage:    'Log Damage',
-    uploading: 'Saving…',
+    uploading: 'Saving...',
   }[phase] || typeInfo.label
 
   const ORDERED = ['recording', 'damage', 'uploading']

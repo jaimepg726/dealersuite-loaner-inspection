@@ -328,3 +328,47 @@ async def route_drive_status(
             "none"
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Stage 9/54 — Loaner App Configuration
+# ---------------------------------------------------------------------------
+
+_CONFIG_KEYS = {"reminder_interval_days", "fuel_threshold_pct"}
+_CONFIG_DEFAULTS = {"reminder_interval_days": 7, "fuel_threshold_pct": 25}
+
+
+@router.get("/config", summary="Get loaner app configuration")
+async def get_config(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    from models.settings import AppSettings
+    result = await db.execute(
+        select(AppSettings).where(AppSettings.key.in_(_CONFIG_KEYS))
+    )
+    stored = {s.key: s.value for s in result.scalars().all()}
+    return {
+        k: int(stored[k]) if k in stored and stored[k] is not None else v
+        for k, v in _CONFIG_DEFAULTS.items()
+    }
+
+
+@router.post("/config", summary="Save loaner app configuration")
+async def save_config(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    from models.settings import AppSettings
+    for key in _CONFIG_KEYS:
+        if key not in data:
+            continue
+        result = await db.execute(select(AppSettings).where(AppSettings.key == key))
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.value = str(int(data[key]))
+        else:
+            db.add(AppSettings(key=key, value=str(int(data[key]))))
+    await db.commit()
+    return {"status": "ok"}

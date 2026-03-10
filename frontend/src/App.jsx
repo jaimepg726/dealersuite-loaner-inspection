@@ -1,22 +1,35 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ui/ProtectedRoute'
+import ErrorBoundary from './components/ui/ErrorBoundary'
+import LoadingScreen from './components/ui/LoadingScreen'
 
-// Pages
+// Eagerly loaded (critical path)
 import LoginPage                from './pages/LoginPage'
 import PorterHome               from './pages/PorterHome'
 import ScanVINPage              from './pages/ScanVINPage'
 import SelectInspectionTypePage from './pages/SelectInspectionTypePage'
 import InspectPage              from './pages/InspectPage'
 import ManagerLayout            from './pages/ManagerLayout'
+import InspectionsPage          from './pages/dashboard/InspectionsPage'
+import LoanersPage              from './pages/dashboard/LoanersPage'
+import FleetPage                from './pages/dashboard/FleetPage'
 
-// Dashboard sub-pages
-import InspectionsPage  from './pages/dashboard/InspectionsPage'
-import FleetPage        from './pages/dashboard/FleetPage'
-import DamagePage       from './pages/dashboard/DamagePage'
-import ReportsPage      from './pages/dashboard/ReportsPage'
-import SettingsPage     from './pages/dashboard/SettingsPage'
-import LoanersPage      from './pages/dashboard/LoanersPage'
+// Lazily loaded (heavy pages — Step 59)
+const DamagePage   = lazy(() => import('./pages/dashboard/DamagePage'))
+const ReportsPage  = lazy(() => import('./pages/dashboard/ReportsPage'))
+const SettingsPage = lazy(() => import('./pages/dashboard/SettingsPage'))
+
+function LazyPage({ children }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingScreen />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
 
 export default function App() {
   return (
@@ -29,25 +42,33 @@ export default function App() {
         {/* ── Porter routes (any authenticated user) ─────────────────── */}
         <Route path="/" element={
           <ProtectedRoute>
-            <PorterHome />
+            <ErrorBoundary>
+              <PorterHome />
+            </ErrorBoundary>
           </ProtectedRoute>
         } />
 
         <Route path="/scan" element={
           <ProtectedRoute>
-            <ScanVINPage />
+            <ErrorBoundary>
+              <ScanVINPage />
+            </ErrorBoundary>
           </ProtectedRoute>
         } />
 
         <Route path="/select-type" element={
           <ProtectedRoute>
-            <SelectInspectionTypePage />
+            <ErrorBoundary>
+              <SelectInspectionTypePage />
+            </ErrorBoundary>
           </ProtectedRoute>
         } />
 
         <Route path="/inspect/:type/:vehicleId" element={
           <ProtectedRoute>
-            <InspectPage />
+            <ErrorBoundary>
+              <InspectPage />
+            </ErrorBoundary>
           </ProtectedRoute>
         } />
 
@@ -57,13 +78,12 @@ export default function App() {
             <ManagerLayout />
           </ProtectedRoute>
         }>
-          {/* Default dashboard tab = Inspections */}
-          <Route index          element={<InspectionsPage />} />
-          <Route path="fleet"   element={<FleetPage />} />
-          <Route path="damage"   element={<DamagePage />} />
-          <Route path="loaners"  element={<LoanersPage />} />
-          <Route path="reports"  element={<ReportsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route index          element={<ErrorBoundary><InspectionsPage /></ErrorBoundary>} />
+          <Route path="fleet"   element={<ErrorBoundary><FleetPage /></ErrorBoundary>} />
+          <Route path="loaners" element={<ErrorBoundary><LoanersPage /></ErrorBoundary>} />
+          <Route path="damage"   element={<LazyPage><DamagePage /></LazyPage>} />
+          <Route path="reports"  element={<LazyPage><ReportsPage /></LazyPage>} />
+          <Route path="settings" element={<LazyPage><SettingsPage /></LazyPage>} />
         </Route>
 
         {/* ── Catch-all ──────────────────────────────────────────────── */}

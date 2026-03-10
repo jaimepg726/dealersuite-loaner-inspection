@@ -18,6 +18,9 @@ class LoanerOut(BaseModel):
     checked_in_at: datetime | None
     notes: str | None
     vehicle_display: str | None = None
+    # Step 53: last inspection info
+    last_inspector_name: str | None = None
+    days_since_inspection: int | None = None
     model_config = {"from_attributes": True}
 
 class LoanerCreate(BaseModel):

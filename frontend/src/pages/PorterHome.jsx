@@ -1,11 +1,11 @@
 /**
- * DealerSuite — Porter Home Screen
- * The first screen a porter sees after login.
- * One giant "Start Inspection" button — nothing else to think about.
+ * DealerSuite — Porter Home Screen (Step 52)
+ * Shows: greeting with name, Drive status badge, inspection CTA, version footer.
  */
 import { useNavigate } from 'react-router-dom'
 import { Camera, LogOut, Clock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import DriveStatusBadge from '../components/ui/DriveStatusBadge'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -59,6 +59,11 @@ export default function PorterHome() {
         </div>
       </header>
 
+      {/* Drive status badge */}
+      <div className="px-5 pt-2 pb-1">
+        <DriveStatusBadge />
+      </div>
+
       {/* Main CTA — takes up most of the screen */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
 
@@ -81,10 +86,13 @@ export default function PorterHome() {
         </p>
       </main>
 
-      {/* Shift time indicator */}
-      <footer className="flex items-center justify-center gap-2 pb-10 text-gray-600 text-xs">
-        <Clock className="w-4 h-4" />
-        <span>Shift token valid 8 hours from login</span>
+      {/* Shift time + version */}
+      <footer className="flex flex-col items-center gap-1 pb-10 text-gray-600 text-xs">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4" />
+          <span>Shift token valid 8 hours from login</span>
+        </div>
+        <span>v1.0.0-batch3</span>
       </footer>
 
     </div>
