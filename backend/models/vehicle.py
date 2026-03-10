@@ -1,87 +1,38 @@
-"""
-DealerSuite — Vehicle Model
-Represents a single loaner, inventory, or sales vehicle in the fleet.
-"""
-
+# vehicle.py
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 from sqlalchemy import String, Integer, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
 
-if TYPE_CHECKING:
-    from models.inspection import Inspection
-
-
 class VehicleStatus(str, enum.Enum):
-    active  = "Active"
-    retired = "Retired"
-    service = "In Service"
-
+    active = "Active"; in_service = "In Service"; retired = "Returned"
 
 class VehicleType(str, enum.Enum):
-    loaner    = "Loaner"
-    inventory = "Inventory"
-    sales     = "Sales"
-
+    loaner = "Loaner"; inventory = "Inventory"; sales = "Sales"
 
 class Vehicle(Base):
     __tablename__ = "vehicles"
-
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-
-    # Dealer identifiers
-    loaner_number: Mapped[str | None] = mapped_column(
-        String(20), nullable=True, index=True
-    )
-    vin: Mapped[str] = mapped_column(
-        String(17), unique=True, nullable=False, index=True
-    )
-
-    # Vehicle details
-    year:  Mapped[int | None]        = mapped_column(Integer, nullable=True)
-    make:  Mapped[str | None]        = mapped_column(String(50), nullable=True)
-    model: Mapped[str | None]        = mapped_column(String(80), nullable=True)
-    plate: Mapped[str | None]        = mapped_column(String(20), nullable=True)
-    mileage: Mapped[int | None]      = mapped_column(Integer, nullable=True)
-    color:   Mapped[str | None]      = mapped_column(String(30), nullable=True)
-    fuel_level: Mapped[str | None]   = mapped_column(String(10), nullable=True)
-
-    # Status / type  (String to match migration — enums used for validation only)
-    status: Mapped[str] = mapped_column(
-        String(20), default=VehicleStatus.active, nullable=False
-    )
-    vehicle_type: Mapped[str] = mapped_column(
-        String(20), default=VehicleType.loaner, nullable=False
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    loaner_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    vin: Mapped[str] = mapped_column(String(17), unique=True, index=True)
+    year: Mapped[int | None] = mapped_column(Integer)
+    make: Mapped[str | None] = mapped_column(String(50))
+    model: Mapped[str | None] = mapped_column(String(50))
+    plate: Mapped[str | None] = mapped_column(String(20))
+    mileage: Mapped[int | None] = mapped_column(Integer)
+    color: Mapped[str | None] = mapped_column(String(30))
+    fuel_level: Mapped[str | None] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(20), default="Active", nullable=False)
+    vehicle_type: Mapped[str] = mapped_column(String(20), default="Loaner", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-
-    # Google Drive — pre-created folder for this vehicle
-    drive_folder_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    drive_folder_id:  Mapped[str | None] = mapped_column(String(200), nullable=True)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-
-    # Relationships
-    inspections: Mapped[list["Inspection"]] = relationship(
-        "Inspection", back_populates="vehicle", cascade="all, delete-orphan"
-    )
-
-    def __repr__(self) -> str:
-        return f"<Vehicle vin={self.vin} loaner={self.loaner_number} {self.year} {self.make} {self.model}>"
-
+    drive_folder_url: Mapped[str | None] = mapped_column(String(255))
+    drive_folder_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    inspections: Mapped[list["Inspection"]] = relationship("Inspection", back_populates="vehicle", cascade="all, delete-orphan")
+    loaners: Mapped[list["Loaner"]] = relationship("Loaner", back_populates="vehicle", cascade="all, delete-orphan")
+    def __repr__(self): return f"<Vehicle vin={self.vin} loaner={self.loaner_number}>"
     @property
     def display_name(self) -> str:
         parts = [str(self.year or ""), self.make or "", self.model or ""]
