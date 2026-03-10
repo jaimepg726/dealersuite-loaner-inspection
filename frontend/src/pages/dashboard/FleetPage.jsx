@@ -54,11 +54,40 @@ export default function FleetPage() {
     return () => clearTimeout(timer)
   }, [search]) // eslint-disable-line
 
+  // ── Fleet summary counts (computed from loaded vehicles) ───────────────
+  const summary = {
+    total:      vehicles.length,
+    active:     vehicles.filter(v => v.status === 'Active').length,
+    inUse:      vehicles.filter(v => v.status === 'In Use').length,
+    inService:  vehicles.filter(v => v.status === 'In Service').length,
+  }
+
   return (
     <div className="flex flex-col gap-0">
 
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="px-5 pt-5 pb-4">
+
+        {/* ── Fleet summary bar ───────────────────────────────────────── */}
+        {!loading && vehicles.length > 0 && (
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {[
+              { label: 'Total',      value: summary.total,     color: 'text-brand-white' },
+              { label: 'Active',     value: summary.active,    color: 'text-green-400'   },
+              { label: 'In Use',     value: summary.inUse,     color: 'text-yellow-400'  },
+              { label: 'In Service', value: summary.inService, color: 'text-red-400'     },
+            ].map(({ label, value, color }) => (
+              <div
+                key={label}
+                className="bg-brand-mid border border-brand-accent rounded-xl px-3 py-3 text-center"
+              >
+                <div className={`text-2xl font-extrabold leading-none ${color}`}>{value}</div>
+                <div className="text-xs text-gray-500 mt-1 font-medium">{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-2xl font-extrabold text-brand-white">Fleet</h2>
