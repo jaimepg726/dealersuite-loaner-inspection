@@ -21,7 +21,6 @@ from services.inspection_service import (
     complete_inspection as _complete,
     get_inspection_by_id,
     update_drive_folder,
-    set_video_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,7 +127,7 @@ _VIDEO_EXT_MAP = {
 @router.post(
     "/{inspection_id}/upload",
     response_model=UploadResponse,
-    summary="Upload video or photo via StorageBackend",
+    summary="Upload video or photo, stored in database",
 )
 async def upload_media(
     inspection_id: int,
@@ -137,7 +136,6 @@ async def upload_media(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    from storage import get_storage_backend, build_filename
     from models.inspection_media import InspectionMedia
     from utils.time import utcnow as _utcnow
 
@@ -148,8 +146,12 @@ async def upload_media(
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds the 512 MB limit")
 
-    # 2 & 3. Validate MIME type and determine media_type from content_type
-    content_type = (file.content_type or "").lower()
+    # 2 & 3. Validate MIME type and determine media_type from content_type.
+    # Strip codec parameters (e.g. "video/webm;codecs=vp9" → "video/webm") before
+    # the set lookup so MediaRecorder blobs with codec suffixes pass validation.
+    raw_content_type = (file.content_type or "").lower()
+    content_type     = raw_content_type.split(";")[0].strip()  # base MIME only
+
     if content_type.startswith("image/"):
         media_type = "photo"
     elif content_type.startswith("video/"):
@@ -165,50 +167,28 @@ async def upload_media(
             detail=f"Unsupported MIME type '{content_type}'. Allowed: {', '.join(sorted(ALLOWED_MIMETYPES))}",
         )
 
-    # Build standardised filename: {LoanerNumber}_{Type}_{Date}_{HHMMSS}.ext
-    vehicle = inspection.vehicle
-    loaner  = vehicle.loaner_number if vehicle else None
-    itype   = inspection.inspection_type
-    if hasattr(itype, "value"):
-        itype = itype.value
-
-    if media_type == "video":
-        ext = _VIDEO_EXT_MAP.get(content_type, "mp4")
-        filename = build_filename(loaner, itype, ext)
-        folder_hint = "inspections"
-    else:
-        ext = "jpg"
-        suffix = damage_location or "other"
-        filename = build_filename(loaner, itype, ext, suffix=suffix)
-        folder_hint = "damage"
-
-    # 4. Upload file using storage backend
-    backend = await get_storage_backend(db)
-    result  = await backend.upload_file(content, filename, content_type, folder_hint)
-
-    # Persist video URL on the inspection record
-    if result.success and media_type == "video" and result.file_id:
-        await set_video_url(db, inspection_id, result.file_id, result.file_url)
-
-    if not result.success and result.backend == "local" and not result.file_id:
-        raise HTTPException(status_code=502, detail="Upload failed on all backends")
-
-    # 5. Insert media record
-    file_url_to_store = result.file_url or result.file_id or filename
-    db.add(InspectionMedia(
+    # 4. Insert media record — store raw bytes in DB (survives redeploys, no /tmp)
+    record = InspectionMedia(
         inspection_id=inspection_id,
-        file_url=file_url_to_store,
+        file_url="",           # updated below once we have the row ID
         media_type=media_type,
+        mime_type=content_type,  # base MIME without codec params
+        file_data=content,
         created_at=_utcnow(),
-    ))
+    )
+    db.add(record)
+    await db.flush()           # populate record.id without committing
+
+    # 5. Set file_url to the permanent serve endpoint
+    record.file_url = f"/api/media/{record.id}"
     await db.commit()
 
     return UploadResponse(
-        file_id=result.file_id,
-        file_url=result.file_url,
-        filename=filename,
+        file_id=str(record.id),
+        file_url=record.file_url,
+        filename=file.filename or f"{media_type}_{record.id}",
         bytes_uploaded=len(content),
-        backend=result.backend,
+        backend="database",
     )
 
 

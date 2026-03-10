@@ -22,6 +22,7 @@ from routes.loaners  import router as loaners_router
 from routes.google_oauth import router as google_oauth_router
 from routes.system      import router as system_router
 from routes.admin       import router as admin_router
+from routes.media       import router as media_router
 from migrations         import run_migrations
 
 settings = get_settings()
@@ -50,6 +51,7 @@ app.include_router(loaners_router,  prefix="/api/loaners",  tags=["loaners"])
 app.include_router(google_oauth_router, prefix="/api/auth/google", tags=["google-oauth"])
 app.include_router(system_router,       prefix="/api/system",       tags=["system"])
 app.include_router(admin_router,        prefix="/api/admin",        tags=["admin"])
+app.include_router(media_router,        prefix="/api/media",        tags=["media"])
 
 @app.get("/health", tags=["system"])
 async def health_check():

@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 logger = logging.getLogger(__name__)
 
 _MIGRATIONS = [
-    ("inspections", "is_demo", "BOOLEAN DEFAULT false"),
-    ("loaners",     "is_demo", "BOOLEAN DEFAULT false"),
-    ("vehicles",    "is_demo", "BOOLEAN DEFAULT false"),
-    ("porters",     "is_demo", "BOOLEAN DEFAULT false"),
+    ("inspections",     "is_demo",   "BOOLEAN DEFAULT false"),
+    ("loaners",         "is_demo",   "BOOLEAN DEFAULT false"),
+    ("vehicles",        "is_demo",   "BOOLEAN DEFAULT false"),
+    ("porters",         "is_demo",   "BOOLEAN DEFAULT false"),
+    ("inspection_media","file_data", "BYTEA"),
+    ("inspection_media","mime_type", "VARCHAR(50)"),
 ]
 
 # DDL statements run once on startup (CREATE TABLE IF NOT EXISTS is idempotent)
