@@ -133,9 +133,10 @@ async def upsert_vehicle_from_csv(db: AsyncSession, row: dict) -> tuple[Vehicle,
         "make":          row.get("Make"),
         "model":         row.get("Model"),
         "plate":         row.get("Plate"),
-        "mileage":       int(row["Mileage"]) if row.get("Mileage") else None,
+        "mileage":       int(str(row["Mileage"]).replace(",", "")) if row.get("Mileage") else None,
         "status":        status_val,
         "vehicle_type":  row.get("Vehicle_Type", "Loaner"),
+        "fuel_level":    row.get("Fuel"),
     }
 
     if existing:
