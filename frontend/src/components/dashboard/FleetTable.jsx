@@ -2,62 +2,66 @@
  * DealerSuite — Fleet Table
  * Renders the list of vehicles for the manager fleet tab.
  * Mobile-friendly card layout (no horizontal scrolling on iPad).
+ * Step 23: Loaner number dominant, plate + fuel prominent.
  */
 
-import { Car, AlertCircle } from 'lucide-react'
+import { Car, AlertCircle, Fuel } from 'lucide-react'
 
 const STATUS_STYLE = {
-  Active:      'bg-green-900/60 text-green-400 border-green-700',
-  Retired:     'bg-gray-800     text-gray-500  border-gray-700',
-  'In Service':'bg-yellow-900/60 text-yellow-400 border-yellow-700',
+  Active:       'bg-green-900/60  text-green-400  border-green-700',
+  Retired:      'bg-gray-800      text-gray-500   border-gray-700',
+  'In Service': 'bg-yellow-900/60 text-yellow-400 border-yellow-700',
+  'In Use':     'bg-blue-900/60   text-blue-300   border-blue-700',
 }
 
-const TYPE_STYLE = {
-  Loaner:    'bg-brand-blue/20 text-brand-blue',
-  Inventory: 'bg-purple-900/50 text-purple-400',
-  Sales:     'bg-orange-900/50 text-orange-400',
+const FUEL_COLOR = {
+  F:    'text-green-400',
+  '3/4':'text-green-400',
+  '1/2':'text-yellow-400',
+  '1/4':'text-orange-400',
+  E:    'text-red-400',
 }
 
 function VehicleCard({ vehicle }) {
   const statusCls = STATUS_STYLE[vehicle.status] || STATUS_STYLE.Active
-  const typeCls   = TYPE_STYLE[vehicle.vehicle_type]  || TYPE_STYLE.Loaner
+  const fuelColor = FUEL_COLOR[vehicle.fuel_level] || 'text-gray-400'
 
   return (
-    <div className="card flex items-start gap-4 hover:border-brand-blue/40 transition-colors">
-      {/* Icon */}
-      <div className="w-12 h-12 bg-brand-accent rounded-xl flex items-center justify-center shrink-0">
-        <Car className="w-6 h-6 text-gray-400" />
+    <div className="card hover:border-brand-blue/40 transition-colors">
+
+      {/* ── Top row: loaner number (dominant) + status badge ── */}
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-2xl font-extrabold text-brand-white tracking-tight leading-none">
+          {vehicle.loaner_number || '—'}
+        </span>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${statusCls}`}>
+          {vehicle.status}
+        </span>
       </div>
 
-      {/* Details */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          {vehicle.loaner_number && (
-            <span className="text-xs font-bold text-gray-400">#{vehicle.loaner_number}</span>
-          )}
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${typeCls}`}>
-            {vehicle.vehicle_type}
-          </span>
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${statusCls}`}>
-            {vehicle.status}
-          </span>
-        </div>
+      {/* ── Year / Make / Model ── */}
+      <p className="text-gray-300 font-semibold text-sm leading-snug mb-2">
+        {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')}
+      </p>
 
-        <p className="text-brand-white font-bold mt-1 leading-tight">
-          {vehicle.year} {vehicle.make} {vehicle.model}
-        </p>
-
-        <div className="flex items-center gap-3 mt-1 flex-wrap">
-          <span className="text-gray-500 text-xs font-mono">{vehicle.vin}</span>
-          {vehicle.plate && (
-            <span className="text-gray-400 text-xs">🚘 {vehicle.plate}</span>
-          )}
-          {vehicle.mileage != null && (
-            <span className="text-gray-500 text-xs">
-              {vehicle.mileage.toLocaleString()} mi
-            </span>
-          )}
-        </div>
+      {/* ── Bottom row: plate · fuel · mileage ── */}
+      <div className="flex items-center gap-4 text-xs flex-wrap">
+        {vehicle.plate && (
+          <span className="font-mono font-bold text-gray-300 bg-brand-accent px-2 py-0.5 rounded">
+            {vehicle.plate}
+          </span>
+        )}
+        {vehicle.fuel_level && (
+          <span className={`flex items-center gap-1 font-bold ${fuelColor}`}>
+            <Fuel className="w-3.5 h-3.5" />
+            {vehicle.fuel_level}
+          </span>
+        )}
+        {vehicle.mileage != null && (
+          <span className="text-gray-500">
+            {vehicle.mileage.toLocaleString()} mi
+          </span>
+        )}
       </div>
     </div>
   )
