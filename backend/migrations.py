@@ -32,21 +32,25 @@ _CREATE_TABLES = [
 
 
 async def run_migrations(engine: AsyncEngine) -> None:
-    async with engine.begin() as conn:
-        # CREATE TABLE migrations (idempotent)
-        for ddl in _CREATE_TABLES:
-            try:
-                await conn.execute(text(ddl))
-                logger.info("Migration: executed CREATE TABLE IF NOT EXISTS")
-            except Exception as exc:
-                logger.warning("Migration: CREATE TABLE skipped — %s", exc)
+    # Build the full ordered list of DDL statements to execute
+    ddl_statements = []
 
-        # ADD COLUMN migrations (idempotent)
-        for table, column, definition in _MIGRATIONS:
-            try:
-                await conn.execute(
-                    text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
-                )
-                logger.info("Migration: added %s.%s", table, column)
-            except Exception:
-                pass  # table may not exist yet — normal for optional tables
+    for ddl in _CREATE_TABLES:
+        ddl_statements.append(ddl.strip())
+
+    for table, column, definition in _MIGRATIONS:
+        ddl_statements.append(
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"
+        )
+
+    # Run each statement in its own transaction.
+    # This is critical: PostgreSQL aborts the entire transaction on any error,
+    # so a single shared transaction would silently skip all subsequent statements
+    # after the first failure. Independent transactions isolate each DDL.
+    for ddl in ddl_statements:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(ddl))
+            logger.info("Migration OK: %s", ddl[:80])
+        except Exception as exc:
+            logger.warning("Migration skipped (already applied?): %s", exc)
