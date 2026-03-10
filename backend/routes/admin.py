@@ -131,7 +131,7 @@ async def demo_enable(
         await db.commit()
     except Exception:
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail="Failed to enable demo mode")
+        raise
 
     return {"detail": "Demo mode enabled", "vehicles": len(_DEMO_VEHICLES)}
 
