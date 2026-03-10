@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import Integer, Text, String, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
-from backend.utils.time import utcnow
+from utils.time import utcnow
 
 
 class InspectionMedia(Base):
