@@ -57,7 +57,11 @@ if STATIC_DIR.exists():
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon(): return FileResponse(STATIC_DIR / "favicon.ico")
     @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str, request: Request): return FileResponse(STATIC_DIR / "index.html")
+    async def serve_spa(full_path: str, request: Request):
+        return FileResponse(
+            STATIC_DIR / "index.html",
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )
 else:
     @app.get("/", tags=["system"])
     async def root(): return {"message":f"{settings.app_name} API working. Frontend on port 5173."}
