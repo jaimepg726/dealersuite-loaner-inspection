@@ -5,7 +5,7 @@ One record per inspection event (checkout or check-in walkround).
 
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -63,6 +63,9 @@ class Inspection(Base):
 
     # Media counts
     photo_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Demo flag — set True for simulated demo records
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
 
     # Notes (manager can add after review)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

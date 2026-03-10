@@ -20,6 +20,9 @@ from routes.fleet    import router as fleet_router
 from routes.manager  import router as manager_router
 from routes.loaners  import router as loaners_router
 from routes.google_oauth import router as google_oauth_router
+from routes.system      import router as system_router
+from routes.admin       import router as admin_router
+from migrations         import run_migrations
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "frontend_dist"
@@ -29,6 +32,7 @@ async def lifespan(app: FastAPI):
     if settings.environment == "development":
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+    await run_migrations(engine)
     yield
     await engine.dispose()
 
@@ -44,6 +48,8 @@ app.include_router(fleet_router,    prefix="/api/fleet",    tags=["fleet"])
 app.include_router(manager_router,  prefix="/api/manager",  tags=["manager"])
 app.include_router(loaners_router,  prefix="/api/loaners",  tags=["loaners"])
 app.include_router(google_oauth_router, prefix="/api/auth/google", tags=["google-oauth"])
+app.include_router(system_router,       prefix="/api/system",       tags=["system"])
+app.include_router(admin_router,        prefix="/api/admin",        tags=["admin"])
 
 @app.get("/health", tags=["system"])
 async def health_check():

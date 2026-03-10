@@ -1,6 +1,30 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ui/ProtectedRoute'
+import api from './utils/api'
+
+function DemoBanner() {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    const check = () =>
+      api.get('/api/admin/demo/status')
+        .then(({ data }) => setShow(data.demo_mode))
+        .catch(() => {})
+
+    check()
+    window.addEventListener('demo-mode-changed', check)
+    return () => window.removeEventListener('demo-mode-changed', check)
+  }, [])
+
+  if (!show) return null
+  return (
+    <div className="sticky top-0 z-50 w-full bg-yellow-400 text-black text-center text-sm font-bold py-2 px-4">
+      ⚠ DEMO MODE ACTIVE — DATA IS SIMULATED
+    </div>
+  )
+}
 
 // Pages
 import LoginPage                from './pages/LoginPage'
@@ -21,6 +45,7 @@ import LoanersPage      from './pages/dashboard/LoanersPage'
 export default function App() {
   return (
     <AuthProvider>
+      <DemoBanner />
       <Routes>
 
         {/* ── Public ─────────────────────────────────────────────────── */}

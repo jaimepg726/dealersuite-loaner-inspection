@@ -46,10 +46,10 @@ def _oauth_client():
 
 
 # GET /api/auth/google/connect
-@router.get("/connect", summary="Start Google OAuth flow (manager only)")
+@router.get("/connect", summary="Start Google OAuth flow (any authenticated user)")
 async def google_connect(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_manager),
+    current_user=Depends(get_current_user),
 ):
     cfg = _oauth_client()
     state = secrets.token_urlsafe(32)
