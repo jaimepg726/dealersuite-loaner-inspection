@@ -26,6 +26,7 @@ class Vehicle(Base):
     status: Mapped[str] = mapped_column(String(20), default="Active", nullable=False)
     vehicle_type: Mapped[str] = mapped_column(String(20), default="Loaner", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     drive_folder_url: Mapped[str | None] = mapped_column(String(255))
     drive_folder_id: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Enum as SAEnum
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Enum as SAEnum, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -25,6 +25,7 @@ class Loaner(Base):
     checked_out_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)
     notes: Mapped[str | None] = mapped_column(Text)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     vehicle = relationship("Vehicle", back_populates="loaners", lazy="selectin")
     created_by_user = relationship("User", lazy="selectin", foreign_keys=[created_by])

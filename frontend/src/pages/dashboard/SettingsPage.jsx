@@ -1,15 +1,17 @@
 /**
- * DealerSuite - Manager Settings Page (Batch 3)
+ * DealerSuite - Manager Settings Page
  * Sections:
  *  1. Google Drive - OAuth connect/disconnect, health test
- *  2. User Management
- *  3. App Info
+ *  2. System Status
+ *  3. Demo Mode
+ *  4. User Management
+ *  5. App Info
  */
 import { useState, useEffect, useCallback } from 'react'
 import {
   Settings, RefreshCw, HardDrive, CheckCircle, AlertTriangle,
   UserPlus, Users, X, Eye, EyeOff, ExternalLink, Unlink, Zap,
-  WifiOff, CloudOff,
+  WifiOff, CloudOff, Activity, Database, FlaskConical,
 } from 'lucide-react'
 import api from '../../utils/api'
 import { useAuth } from '../../context/AuthContext'
@@ -52,13 +54,8 @@ function DriveSection() {
     }
   }, [load])
 
-  async function handleConnect() {
-    const res = await fetch('/api/auth/google/connect', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('ds_token')}` },
-      redirect: 'manual',
-    })
-    const redirectUrl = res.headers.get('location') || res.url
-    window.location.href = redirectUrl
+  function handleConnect() {
+    window.location.href = '/api/auth/google/connect'
   }
 
   async function handleTest() {
@@ -192,6 +189,145 @@ function DriveSection() {
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── System Status section ──────────────────────────────────────────────────────
+function SystemStatusSection() {
+  const [status,  setStatus]  = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/api/system/status')
+      .then(({ data }) => setStatus(data))
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const cards = status ? [
+    {
+      label: 'API Status',
+      value: status.api_status === 'ok' ? 'Online' : status.api_status,
+      ok: status.api_status === 'ok',
+      icon: <Activity className="w-4 h-4" />,
+    },
+    {
+      label: 'Database',
+      value: status.database === 'connected' ? 'Connected' : 'Error',
+      ok: status.database === 'connected',
+      icon: <Database className="w-4 h-4" />,
+    },
+    {
+      label: 'Storage Mode',
+      value: status.storage_mode === 'google_drive' ? 'Google Drive' : 'Local',
+      ok: true,
+      icon: <HardDrive className="w-4 h-4" />,
+    },
+    {
+      label: 'Google Drive',
+      value: status.google_drive_connected ? 'Connected' : 'Not Connected',
+      ok: status.google_drive_connected,
+      icon: <CheckCircle className="w-4 h-4" />,
+    },
+    {
+      label: 'Backend Version',
+      value: status.backend_version,
+      ok: true,
+      icon: <Settings className="w-4 h-4" />,
+    },
+  ] : []
+
+  if (loading) return <div className="card h-32 animate-pulse bg-brand-mid" />
+
+  if (!status) return (
+    <div className="card flex items-center gap-3 text-red-400 text-sm">
+      <WifiOff className="w-5 h-5 shrink-0" />
+      Could not load system status
+    </div>
+  )
+
+  return (
+    <div className="card flex flex-col gap-0">
+      {cards.map(({ label, value, ok, icon }) => (
+        <div key={label} className="flex items-center justify-between py-2.5 border-b border-brand-accent last:border-0">
+          <div className="flex items-center gap-2 text-gray-500 text-sm">
+            <span className={ok ? 'text-green-400' : 'text-red-400'}>{icon}</span>
+            {label}
+          </div>
+          <span className={`text-sm font-semibold ${ok ? 'text-brand-white' : 'text-red-400'}`}>
+            {value}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Demo Mode section ─────────────────────────────────────────────────────────
+function DemoModeSection() {
+  const [demoActive, setDemoActive] = useState(false)
+  const [loading,    setLoading]    = useState(true)
+  const [toggling,   setToggling]   = useState(false)
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/admin/demo/status')
+      setDemoActive(data.demo_mode)
+    } catch {
+      setDemoActive(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadStatus() }, [loadStatus])
+
+  async function handleToggle() {
+    setToggling(true)
+    try {
+      if (demoActive) {
+        await api.post('/api/admin/demo/disable')
+      } else {
+        await api.post('/api/admin/demo/enable')
+      }
+      await loadStatus()
+      // Trigger a page-level data refresh by reloading
+      window.dispatchEvent(new Event('demo-mode-changed'))
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Could not toggle demo mode')
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  return (
+    <div className="card flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0
+          ${demoActive ? 'bg-yellow-500/15' : 'bg-brand-accent'}`}>
+          <FlaskConical className={`w-5 h-5 ${demoActive ? 'text-yellow-400' : 'text-gray-500'}`} />
+        </div>
+        <div>
+          <p className="font-bold text-sm text-brand-white">Demo Mode</p>
+          <p className="text-gray-500 text-xs">
+            Simulated data for demos. Never affects real records.
+          </p>
+        </div>
+      </div>
+
+      <button
+        onClick={handleToggle}
+        disabled={loading || toggling}
+        className={`relative w-14 h-7 rounded-full transition-colors shrink-0 ${
+          demoActive ? 'bg-yellow-500' : 'bg-brand-accent'
+        } disabled:opacity-50`}
+        aria-label={demoActive ? 'Disable demo mode' : 'Enable demo mode'}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+          demoActive ? 'translate-x-7' : 'translate-x-0'
+        }`} />
+      </button>
     </div>
   )
 }
@@ -343,6 +479,18 @@ export default function SettingsPage() {
         <div>
           <SectionTitle>Google Drive</SectionTitle>
           <DriveSection />
+        </div>
+
+        {/* System Status */}
+        <div>
+          <SectionTitle>System Status</SectionTitle>
+          <SystemStatusSection />
+        </div>
+
+        {/* Demo Mode */}
+        <div>
+          <SectionTitle>Demo Mode</SectionTitle>
+          <DemoModeSection />
         </div>
 
         {/* User Management */}
