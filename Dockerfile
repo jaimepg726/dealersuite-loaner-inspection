@@ -8,18 +8,17 @@
 # ── Stage 1: Build React frontend ───────────────────────────────────────────
 FROM node:20-alpine AS frontend-build
 
-WORKDIR /app/frontend
+WORKDIR /app
 
 # Install deps first (layer-cached unless package.json changes)
-COPY frontend/package*.json ./
-RUN npm ci
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
 
-# Cache-busting build arg — increment to force a fresh frontend build on Railway
-ARG CACHE_BUST=1
+# Copy source (invalidates layer on ANY frontend change, triggering rebuild)
+COPY frontend/ ./frontend/
 
-# Copy source and build (rm -rf dist ensures no stale artifacts)
-COPY frontend/ ./
-RUN rm -rf dist && npm run build
+# Build
+RUN cd frontend && npm run build
 # Produces /app/frontend/dist/
 
 
