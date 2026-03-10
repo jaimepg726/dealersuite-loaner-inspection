@@ -1,5 +1,5 @@
 """
-DealerSuite — Fleet CSV Import Service
+DealerSuite - Fleet CSV Import Service
 Parses TSD Dealer CSV exports and upserts vehicles into the database.
 
 Expected CSV columns (case-insensitive, order-independent):
@@ -28,16 +28,28 @@ logger = logging.getLogger(__name__)
 REQUIRED_COLS = {"vin"}
 
 COLUMN_ALIASES = {
-    # Normalised key → possible CSV header names
-    "loaner_number": ["loaner_number", "loaner number", "loaner#", "loaner_no", "unit"],
+    # Normalised key -> possible CSV header names (includes real TSD Dealer export headers)
+    "loaner_number": ["loaner_number", "loaner number", "loaner#", "loaner_no", "unit", "unit_number", "unit number"],
     "vin":           ["vin", "vin number", "vin#"],
     "year":          ["year", "model_year", "yr"],
     "make":          ["make", "manufacturer"],
     "model":         ["model", "model_name"],
-    "plate":         ["plate", "license_plate", "plate_number", "license"],
-    "mileage":       ["mileage", "miles", "odometer", "current_mileage"],
-    "status":        ["status", "vehicle_status"],
-    "vehicle_type":  ["vehicle_type", "type", "category"],
+    "plate":         ["plate", "license_plate", "plate_number", "license", "license_plate"],
+    "mileage":       ["mileage", "miles", "odometer", "current_mileage", "current_miles"],
+    "status":        ["status", "vehicle_status", "current_status"],
+    "vehicle_type":  ["vehicle_type", "type", "category", "body_style"],
+    "fuel":          ["fuel", "fuel_level", "current_fuel"],
+}
+
+# Status mapping from TSD export values to our internal values
+TSD_STATUS_MAP = {
+    "in use":      "Active",
+    "available":   "Active",
+    "active":      "Active",
+    "in service":  "In Service",
+    "out of service": "In Service",
+    "retired":     "Retired",
+    "sold":        "Retired",
 }
 
 
@@ -71,13 +83,27 @@ class ImportResult:
 # CSV normalisation helpers
 # ---------------------------------------------------------------------------
 
+def _strip_excel(value: str) -> str:
+    # Strip Excel formula wrapper: ="M498" -> M498
+    if not value:
+        return value
+    v = value.strip()
+    # Pattern: ="somevalue"  ->  somevalue
+    if v.startswith('="') and v.endswith('"'):
+        v = v[2:-1]
+    # Leftover = sign with no quotes
+    elif v.startswith('='):
+        v = v[1:]
+    return v.strip()
+
+
 def _normalise_header(raw: str) -> str:
     return raw.strip().lower().replace(" ", "_").replace("-", "_")
 
 
 def _map_columns(headers: list[str]) -> dict[str, str]:
     """
-    Build a mapping: canonical_key → actual_csv_header
+    Build a mapping: canonical_key -> actual_csv_header
     Returns dict with only the columns that were found.
     """
     normalised = {_normalise_header(h): h for h in headers}
@@ -91,11 +117,19 @@ def _map_columns(headers: list[str]) -> dict[str, str]:
 
 
 def _get(row: dict, mapping: dict, key: str) -> Optional[str]:
-    """Safe getter — returns None if column not in CSV."""
+    """Safe getter - returns None if column not in CSV. Strips Excel formula wrappers."""
     csv_col = mapping.get(key)
     if csv_col is None:
         return None
-    return (row.get(csv_col) or "").strip() or None
+    raw = (row.get(csv_col) or "").strip()
+    return _strip_excel(raw) or None
+
+
+def _map_status(raw: str | None) -> str:
+    """Map TSD Dealer status strings to our internal VehicleStatus values."""
+    if not raw:
+        return "Active"
+    return TSD_STATUS_MAP.get(raw.lower().strip(), "Active")
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +146,7 @@ async def import_fleet_csv(
     """
     result = ImportResult()
 
-    # Decode bytes — try UTF-8, fall back to latin-1 (common in dealer exports)
+    # Decode bytes - try UTF-8, fall back to latin-1 (common in dealer exports)
     try:
         text = csv_bytes.decode("utf-8-sig")   # strip BOM if present
     except UnicodeDecodeError:
@@ -141,6 +175,8 @@ async def import_fleet_csv(
 
         raw_vin = _get(row, col_map, "vin") or ""
 
+        raw_status = _get(row, col_map, "status") or "Active"
+
         # Build the normalised row dict that upsert_vehicle_from_csv expects
         normalised = {
             "VIN":          raw_vin,
@@ -150,8 +186,9 @@ async def import_fleet_csv(
             "Model":         _get(row, col_map, "model"),
             "Plate":         _get(row, col_map, "plate"),
             "Mileage":       _get(row, col_map, "mileage"),
-            "Status":        _get(row, col_map, "status") or "Active",
+            "Status":        _map_status(raw_status),
             "Vehicle_Type":  _get(row, col_map, "vehicle_type") or "Loaner",
+            "Fuel":          _get(row, col_map, "fuel"),
         }
 
         try:
