@@ -9,12 +9,14 @@ import logging
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from dependencies import get_current_user, require_manager
+from services.auth_service import decode_access_token
 from services.settings_service import (
     get_setting, set_setting, delete_setting,
     KEY_GOOGLE_ACCESS_TOKEN,
@@ -49,8 +51,18 @@ def _oauth_client():
 @router.get("/connect", summary="Start Google OAuth flow (any authenticated user)")
 async def google_connect(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    token: str = Query(None),
 ):
+    # Verify the JWT passed as ?token= (browser navigation can't send headers)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_access_token(token)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    from models.user import User
+    result = await db.execute(select(User).where(User.id == int(payload["sub"])))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=401, detail="User not found")
     cfg = _oauth_client()
     state = secrets.token_urlsafe(32)
     await set_setting(db, KEY_OAUTH_STATE, state)

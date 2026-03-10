@@ -50,7 +50,6 @@ _DEMO_INSPECTIONS = [
 @router.get("/demo/status", summary="Is demo mode active?")
 async def demo_status(
     db: AsyncSession = Depends(get_db),
-    _=Depends(require_manager),
 ):
     result = await db.execute(
         select(func.count()).select_from(Vehicle).where(Vehicle.is_demo == True)  # noqa: E712
