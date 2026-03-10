@@ -14,9 +14,12 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 
-# Copy source and build
+# Cache-busting build arg — increment to force a fresh frontend build on Railway
+ARG CACHE_BUST=1
+
+# Copy source and build (rm -rf dist ensures no stale artifacts)
 COPY frontend/ ./
-RUN npm run build
+RUN rm -rf dist && npm run build
 # Produces /app/frontend/dist/
 
 
