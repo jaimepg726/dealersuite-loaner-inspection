@@ -19,6 +19,7 @@ from routes.inspect  import router as inspect_router
 from routes.fleet    import router as fleet_router
 from routes.manager  import router as manager_router
 from routes.loaners  import router as loaners_router
+from routes.google_oauth import router as google_oauth_router
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "frontend_dist"
@@ -42,6 +43,7 @@ app.include_router(inspect_router,  prefix="/api/inspect",  tags=["inspect"])
 app.include_router(fleet_router,    prefix="/api/fleet",    tags=["fleet"])
 app.include_router(manager_router,  prefix="/api/manager",  tags=["manager"])
 app.include_router(loaners_router,  prefix="/api/loaners",  tags=["loaners"])
+app.include_router(google_oauth_router, prefix="/api/auth/google", tags=["google-oauth"])
 
 @app.get("/health", tags=["system"])
 async def health_check():
