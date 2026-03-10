@@ -1,5 +1,5 @@
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from utils.time import utcnow
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from dependencies import get_db, get_current_user
@@ -42,7 +42,7 @@ async def checkin(id: int, body: LoanerCheckIn, db: AsyncSession = Depends(get_d
     l = await db.get(Loaner, id)
     if not l: raise HTTPException(404, "Not found")
     if l.status == "Returned": raise HTTPException(400, "Already checked in")
-    l.status = "Returned"; l.checked_in_at = datetime.utcnow()
+    l.status = "Returned"; l.checked_in_at = utcnow()
     if body.mileage_in is not None: l.mileage_in = body.mileage_in
     if body.fuel_in is not None: l.fuel_in = body.fuel_in
     if body.notes is not None: l.notes = body.notes

@@ -31,6 +31,14 @@ router = APIRouter()
 
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024  # 512 MB
 
+# Supported video MIME types and their file extensions
+_VIDEO_MIME_TO_EXT: dict[str, str] = {
+    "video/mp4":       "mp4",
+    "video/quicktime": "mov",
+    "video/webm":      "webm",
+    "video/x-msvideo": "avi",
+}
+
 
 class CompleteBody(BaseModel):
     photo_count: int = 0
@@ -144,8 +152,10 @@ async def upload_media(
         itype = itype.value
 
     if media_type == "video":
-        filename = build_filename(loaner, itype, "mp4")
-        mimetype = "video/mp4"
+        # Accept video/mp4, video/quicktime (mov), video/webm, video/x-msvideo (avi)
+        mimetype = file.content_type if file.content_type in _VIDEO_MIME_TO_EXT else "video/mp4"
+        ext = _VIDEO_MIME_TO_EXT.get(mimetype, "mp4")
+        filename = build_filename(loaner, itype, ext)
         folder_hint = "inspections"
     else:
         ext = "jpg"
@@ -154,7 +164,9 @@ async def upload_media(
         mimetype = "image/jpeg"
         folder_hint = "damage"
 
-    # Upload through abstraction layer
+    # Upload through abstraction layer.
+    # If storage_mode == "local": Local files are temporary and will be wiped on Railway redeploy.
+    # If storage_mode == "drive": file is uploaded to the connected Google Drive folder.
     backend = await get_storage_backend(db)
     result  = await backend.upload_file(content, filename, mimetype, folder_hint)
 

@@ -1,6 +1,7 @@
 # vehicle.py
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, Boolean
+from utils.time import utcnow
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -29,8 +30,8 @@ class Vehicle(Base):
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     drive_folder_url: Mapped[str | None] = mapped_column(String(255))
     drive_folder_id: Mapped[str | None] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     inspections: Mapped[list["Inspection"]] = relationship("Inspection", back_populates="vehicle", cascade="all, delete-orphan")
     loaners: Mapped[list["Loaner"]] = relationship("Loaner", back_populates="vehicle", cascade="all, delete-orphan")
     def __repr__(self): return f"<Vehicle vin={self.vin} loaner={self.loaner_number}>"

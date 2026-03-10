@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Enum as SAEnum, Boolean
+from utils.time import utcnow
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 import enum
@@ -22,8 +23,8 @@ class Loaner(Base):
     mileage_in: Mapped[int | None] = mapped_column(Integer)
     fuel_out: Mapped[str | None] = mapped_column(String(10))
     fuel_in: Mapped[str | None] = mapped_column(String(10))
-    checked_out_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)
+    checked_out_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))

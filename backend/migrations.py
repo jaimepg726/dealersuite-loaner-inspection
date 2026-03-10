@@ -15,6 +15,15 @@ _MIGRATIONS = [
     ("porters",     "is_demo", "BOOLEAN DEFAULT false"),
 ]
 
+# Columns that must be TIMESTAMPTZ (timezone-aware) to avoid asyncpg DataError.
+# ALTER TYPE is idempotent when the column is already TIMESTAMPTZ.
+_TIMESTAMPTZ_MIGRATIONS = [
+    ("loaners",  "checked_out_at"),
+    ("loaners",  "checked_in_at"),
+    ("vehicles", "created_at"),
+    ("vehicles", "updated_at"),
+]
+
 
 async def run_migrations(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
@@ -26,3 +35,15 @@ async def run_migrations(engine: AsyncEngine) -> None:
                 logger.info("Migration: added %s.%s", table, column)
             except Exception:
                 pass  # table may not exist yet — normal for optional tables
+
+        for table, column in _TIMESTAMPTZ_MIGRATIONS:
+            try:
+                await conn.execute(
+                    text(
+                        f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ "
+                        f"USING {column} AT TIME ZONE 'UTC'"
+                    )
+                )
+                logger.info("Migration: converted %s.%s to TIMESTAMPTZ", table, column)
+            except Exception:
+                pass  # already TIMESTAMPTZ, table missing, or non-PostgreSQL DB
