@@ -3,9 +3,10 @@ POST /api/admin/demo/enable   -> insert demo records (is_demo=true)
 POST /api/admin/demo/disable  -> delete all demo records
 GET  /api/admin/demo/status   -> {demo_mode: bool}
 """
+import traceback
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,11 +53,15 @@ _DEMO_INSPECTIONS = [
 async def demo_status(
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(func.count()).select_from(Vehicle).where(Vehicle.is_demo == True)  # noqa: E712
-    )
-    count = result.scalar_one()
-    return {"demo_mode": count > 0}
+    from services.settings_service import get_setting
+    flag = await get_setting(db, "demo_mode")
+    # Fall back to counting demo vehicles if settings row missing
+    if flag is None:
+        result = await db.execute(
+            select(func.count()).select_from(Vehicle).where(Vehicle.is_demo == True)  # noqa: E712
+        )
+        return {"demo_mode": result.scalar_one() > 0}
+    return {"demo_mode": flag == "true"}
 
 
 @router.post("/demo/enable", summary="Insert demo records")
@@ -64,58 +69,70 @@ async def demo_enable(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_manager),
 ):
+    from services.settings_service import set_setting
+
     # Idempotent — skip if demo data already exists
     existing = await db.execute(
         select(func.count()).select_from(Vehicle).where(Vehicle.is_demo == True)  # noqa: E712
     )
     if existing.scalar_one() > 0:
+        await set_setting(db, "demo_mode", "true")
+        await db.commit()
         return {"detail": "Demo mode already active"}
 
-    now = utcnow()
+    try:
+        now = utcnow()
 
-    # Insert vehicles
-    vehicles = []
-    for v in _DEMO_VEHICLES:
-        veh = Vehicle(
-            vin=v["vin"], loaner_number=v["loaner_number"],
-            year=v["year"], make=v["make"], model=v["model"],
-            plate=v["plate"], color=v["color"], fuel_level=v["fuel_level"],
-            vehicle_type=v["vehicle_type"], status=v["status"],
-            is_active=True, is_demo=True,
-        )
-        db.add(veh)
-        vehicles.append(veh)
-    await db.flush()  # get IDs
+        # 1. Insert demo vehicles — capture IDs before inserting dependants
+        vehicles = []
+        for v in _DEMO_VEHICLES:
+            veh = Vehicle(
+                vin=v["vin"], loaner_number=v["loaner_number"],
+                year=v["year"], make=v["make"], model=v["model"],
+                plate=v["plate"], color=v["color"], fuel_level=v["fuel_level"],
+                vehicle_type=v["vehicle_type"], status=v["status"],
+                is_active=True, is_demo=True,
+            )
+            db.add(veh)
+            vehicles.append(veh)
+        await db.flush()  # get IDs before FK inserts
 
-    # Insert loaners
-    for l in _DEMO_LOANERS:
-        db.add(Loaner(
-            vehicle_id=vehicles[l["vehicle_idx"]].id,
-            customer_name=l["customer_name"],
-            customer_phone=l["customer_phone"],
-            ro_number=l["ro_number"],
-            advisor_name=l["advisor_name"],
-            mileage_out=l["mileage_out"],
-            fuel_out=l["fuel_out"],
-            status=l["status"],
-            checked_out_at=now - timedelta(hours=3),
-            is_demo=True,
-        ))
+        # 2. Insert demo loaners referencing vehicle IDs
+        for l in _DEMO_LOANERS:
+            db.add(Loaner(
+                vehicle_id=vehicles[l["vehicle_idx"]].id,
+                customer_name=l["customer_name"],
+                customer_phone=l["customer_phone"],
+                ro_number=l["ro_number"],
+                advisor_name=l["advisor_name"],
+                mileage_out=l["mileage_out"],
+                fuel_out=l["fuel_out"],
+                status=l["status"],
+                checked_out_at=utcnow() - timedelta(hours=3),
+                is_demo=True,
+            ))
 
-    # Insert inspections
-    for i in _DEMO_INSPECTIONS:
-        db.add(Inspection(
-            vehicle_id=vehicles[i["vehicle_idx"]].id,
-            inspection_type=i["inspection_type"],
-            status=i["status"],
-            inspector_name=i["inspector_name"],
-            photo_count=i["photo_count"],
-            started_at=now - timedelta(hours=4),
-            completed_at=now - timedelta(hours=3, minutes=30),
-            is_demo=True,
-        ))
+        # 3. Insert demo inspections referencing vehicle IDs
+        for i in _DEMO_INSPECTIONS:
+            db.add(Inspection(
+                vehicle_id=vehicles[i["vehicle_idx"]].id,
+                inspection_type=i["inspection_type"],
+                status=i["status"],
+                inspector_name=i["inspector_name"],
+                photo_count=i["photo_count"],
+                started_at=utcnow() - timedelta(hours=4),
+                completed_at=utcnow() - timedelta(hours=3, minutes=30),
+                is_demo=True,
+            ))
 
-    await db.commit()
+        # 4. Persist demo_mode flag in settings
+        await set_setting(db, "demo_mode", "true")
+
+        await db.commit()
+    except Exception:
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to enable demo mode")
+
     return {"detail": "Demo mode enabled", "vehicles": len(_DEMO_VEHICLES)}
 
 
@@ -124,8 +141,13 @@ async def demo_disable(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_manager),
 ):
+    from services.settings_service import set_setting
+
+    # Delete in FK-safe order (child rows before parent rows)
+    await db.execute(text("DELETE FROM inspection_media WHERE inspection_id IN (SELECT id FROM inspections WHERE is_demo = true)"))
     await db.execute(text("DELETE FROM inspections WHERE is_demo = true"))
     await db.execute(text("DELETE FROM loaners     WHERE is_demo = true"))
     await db.execute(text("DELETE FROM vehicles    WHERE is_demo = true"))
+    await set_setting(db, "demo_mode", "false")
     await db.commit()
     return {"detail": "Demo mode disabled"}
