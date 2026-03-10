@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 logger = logging.getLogger(__name__)
 
 _MIGRATIONS = [
-    ("inspections", "is_demo", "BOOLEAN NOT NULL DEFAULT false"),
-    ("loaners",     "is_demo", "BOOLEAN NOT NULL DEFAULT false"),
-    ("vehicles",    "is_demo", "BOOLEAN NOT NULL DEFAULT false"),
+    ("inspections", "is_demo", "BOOLEAN DEFAULT false"),
+    ("loaners",     "is_demo", "BOOLEAN DEFAULT false"),
+    ("vehicles",    "is_demo", "BOOLEAN DEFAULT false"),
+    ("porters",     "is_demo", "BOOLEAN DEFAULT false"),
 ]
 
 
@@ -20,8 +21,8 @@ async def run_migrations(engine: AsyncEngine) -> None:
         for table, column, definition in _MIGRATIONS:
             try:
                 await conn.execute(
-                    text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                    text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
                 )
                 logger.info("Migration: added %s.%s", table, column)
             except Exception:
-                pass  # column already exists — normal on subsequent startups
+                pass  # table may not exist yet — normal for optional tables

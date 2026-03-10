@@ -243,7 +243,7 @@ class GoogleDriveBackend(StorageBackend):
                 from googleapiclient.http import MediaIoBaseUpload
                 meta = {"name": filename, "parents": [folder_id]}
                 media = MediaIoBaseUpload(
-                    io.BytesIOHcontent), mimetype=mimetype, resumable=True
+                    io.BytesIO(content), mimetype=mimetype, resumable=True
                 )
                 f = service.files().create(
                     body=meta, media_body=media, fields="id"

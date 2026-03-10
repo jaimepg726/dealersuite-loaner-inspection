@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     yield
     await engine.dispose()
 
-app = FastAPI(btitle=settings.app_name, version="1.0.0", lifespan=lifespan,
+app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan,
     docs_url="/docs" if settings.environment != "production" else None, redoc_url=None)
 
 app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url,"http://localhost:5173","http://localhost:4173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
