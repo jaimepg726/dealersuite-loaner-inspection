@@ -55,7 +55,8 @@ function DriveSection() {
   }, [load])
 
   function handleConnect() {
-    window.location.href = '/api/auth/google/connect'
+    const token = localStorage.getItem('ds_token')
+    window.location.href = `/api/auth/google/connect?token=${token}`
   }
 
   async function handleTest() {
