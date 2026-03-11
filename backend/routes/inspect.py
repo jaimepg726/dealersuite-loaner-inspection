@@ -124,6 +124,13 @@ _VIDEO_EXT_MAP = {
     "video/x-msvideo": "avi",
 }
 
+_MIME_EXT_MAP = {
+    **_VIDEO_EXT_MAP,
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
 
 # POST /{id}/upload
 @router.post(
@@ -214,12 +221,16 @@ async def upload_media(
     #    Drive URL so there is a permanent off-DB copy as well.
     final_backend = "database"
     try:
-        from storage.drive_backend import GoogleDriveBackend
+        from storage.drive_backend import GoogleDriveBackend, build_filename as _build_filename
         drive = GoogleDriveBackend(db)
         creds = await drive._get_credentials()
         if creds:
             folder_hint = "inspections" if media_type == "video" else "damage"
-            drive_filename = file.filename or f"{media_type}_{record.id}"
+            loaner_number = inspection.vehicle.loaner_number if inspection.vehicle else None
+            insp_type = (inspection.inspection_type or "inspection").lower()
+            ext = _MIME_EXT_MAP.get(content_type, "bin")
+            suffix = damage_location if media_type == "photo" and damage_location else ""
+            drive_filename = _build_filename(loaner_number, insp_type, ext, suffix=suffix)
             drive_result = None
             for attempt in range(2):
                 try:

@@ -15,7 +15,7 @@ from storage.base import StorageBackend, UploadResult
 
 logger = logging.getLogger(__name__)
 
-DRIVE_FILE_BASE = "https://drive.google.com/file/d/{}/view"
+DRIVE_FILE_BASE = "https://drive.google.com/uc?id={}&export=view"
 UPLOAD_TIMEOUT = 30
    # seconds
 ROOT_FOLDER = "DealerSuite Loaner Inspections"
