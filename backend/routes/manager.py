@@ -1,19 +1,19 @@
 """
-DealerSuite ÃÂ¢ÃÂÃÂ Manager Dashboard Routes
+DealerSuite — Manager Dashboard Routes
 
-GET  /api/manager/stats                  ÃÂ¢ÃÂÃÂ dashboard KPI summary
-GET  /api/manager/inspections            ÃÂ¢ÃÂÃÂ paginated inspection list
-GET  /api/manager/inspections/{id}       ÃÂ¢ÃÂÃÂ single inspection detail
-GET  /api/manager/damage                 ÃÂ¢ÃÂÃÂ damage review queue
-PATCH /api/manager/damage/{id}           ÃÂ¢ÃÂÃÂ assign RO / update status
-GET  /api/manager/reports                ÃÂ¢ÃÂÃÂ aggregate report data
+GET  /api/manager/stats                  → dashboard KPI summary
+GET  /api/manager/inspections            → paginated inspection list
+GET  /api/manager/inspections/{id}       → single inspection detail
+GET  /api/manager/damage                 → damage review queue
+PATCH /api/manager/damage/{id}           → assign RO / update status
+GET  /api/manager/reports                → aggregate report data
 
-ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Stage 10: User Management & Settings ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
-GET    /api/manager/users                ÃÂ¢ÃÂÃÂ list all users
-POST   /api/manager/users                ÃÂ¢ÃÂÃÂ create a new porter / manager
-PATCH  /api/manager/users/{id}           ÃÂ¢ÃÂÃÂ update user (name, role, active, password)
-DELETE /api/manager/users/{id}           ÃÂ¢ÃÂÃÂ soft-deactivate a user
-GET    /api/manager/drive-status         ÃÂ¢ÃÂÃÂ Google Drive connection health check
+── Stage 10: User Management & Settings ──────────────────────────────────────
+GET    /api/manager/users                → list all users
+POST   /api/manager/users                → create a new porter / manager
+PATCH  /api/manager/users/{id}           → update user (name, role, active, password)
+DELETE /api/manager/users/{id}           → soft-deactivate a user
+GET    /api/manager/drive-status         → Google Drive connection health check
 """
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -134,7 +134,7 @@ async def route_reports(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 ÃÂ¢ÃÂÃÂ User Management (admin & manager access)
+# Stage 10 — User Management (admin & manager access)
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -299,7 +299,7 @@ async def route_deactivate_user(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 ÃÂ¢ÃÂÃÂ Google Drive status
+# Stage 10 — Google Drive status
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -311,7 +311,7 @@ async def route_drive_status(
 ):
     """
     Returns whether Google Drive is configured and can authenticate.
-    Does not make a live API call ÃÂ¢ÃÂÃÂ just checks whether credentials exist.
+    Does not make a live API call — just checks whether credentials exist.
     """
     from config import get_settings
     settings = get_settings()
@@ -332,25 +332,25 @@ async def route_drive_status(
     }
 
 
+# ---------------------------------------------------------------------------
+# Frame comparison (checkout vs checkin media side-by-side)
+# ---------------------------------------------------------------------------
+
 @router.get("/inspections/{inspection_id}/frame-match")
 async def get_frame_match(
     inspection_id: int,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_manager),
 ):
-    """Compare checkout vs checkin for same vehicle - show before/after media."""
+    """Compare checkout vs checkin for same vehicle — show before/after media."""
     from sqlalchemy import select as _sel, func as _func
     from models.inspection import Inspection as _Insp
     from models.inspection_media import InspectionMedia as _Media
-
     insp = await db.get(_Insp, inspection_id)
     if not insp:
         raise HTTPException(status_code=404, detail="Inspection not found")
-
-    # Match: checkin pairs with checkout and vice versa
     cur_type = (insp.inspection_type or "").lower()
     pair_type = "Checkout" if cur_type == "checkin" else "Checkin"
-
     stmt = (
         _sel(_Insp)
         .where(
@@ -362,13 +362,11 @@ async def get_frame_match(
         .limit(1)
     )
     paired = (await db.execute(stmt)).scalar_one_or_none()
-
     async def _media(iid):
         rows = (await db.execute(
             _sel(_Media).where(_Media.inspection_id == iid)
         )).scalars().all()
         return [{"id": m.id, "file_url": m.file_url, "media_type": m.media_type} for m in rows]
-
     return {
         "inspection_id": inspection_id,
         "inspection_type": insp.inspection_type,
