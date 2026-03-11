@@ -26,8 +26,7 @@ from services.inspection_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_UPLOAD_MB = 100
-MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024  # 100 MB
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 class CompleteBody(BaseModel):
@@ -148,11 +147,11 @@ async def upload_media(
 
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     file_size = len(content)
-    if file_size > MAX_UPLOAD_MB * 1024 * 1024:
+    if file_size > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
 
     # 2 & 3. Validate MIME type and determine media_type from content_type.
-    # Strip codec parameters (e.g. "video/webm;codecs=vp9" → "video/webm") before
+    # Strip codec parameters (e.g. "video/webm;codecs=vp9" â "video/webm") before
     # the set lookup so MediaRecorder blobs with codec suffixes pass validation.
     raw_content_type = (file.content_type or "").lower()
     content_type     = raw_content_type.split(";")[0].strip()  # base MIME only
@@ -172,7 +171,7 @@ async def upload_media(
             detail=f"Unsupported MIME type '{content_type}'. Allowed: {', '.join(sorted(ALLOWED_MIMETYPES))}",
         )
 
-    # 4. Insert media record — store raw bytes in DB (survives redeploys, no /tmp)
+    # 4. Insert media record â store raw bytes in DB (survives redeploys, no /tmp)
     record = InspectionMedia(
         inspection_id=inspection_id,
         file_url="",           # updated below once we have the row ID
@@ -188,7 +187,7 @@ async def upload_media(
     record.file_url = f"/api/media/{record.id}"
     await db.commit()
 
-    # 6. Attempt Drive upload opportunistically — DB record is the fallback.
+    # 6. Attempt Drive upload opportunistically â DB record is the fallback.
     #    If Drive is connected and upload succeeds, update file_url to the
     #    Drive URL so there is a permanent off-DB copy as well.
     final_backend = "database"
