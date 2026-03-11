@@ -110,7 +110,7 @@ class GoogleDriveBackend(StorageBackend):
 
             # No refresh token and token expired = can't do anything
             if token_expired and not refresh_token:
-                logger.warning("Drive: token expired and no refresh_token — reconnect required")
+                logger.warning("Drive: token expired and no refresh_token â reconnect required")
                 return None
 
             from google.oauth2.credentials import Credentials
@@ -124,8 +124,12 @@ class GoogleDriveBackend(StorageBackend):
                 client_secret=cfg.google_client_secret,
                 expiry=expiry,
             )
+            # Force expiry to be UTC-aware — google-auth raises TypeError otherwise
             if creds.expiry and creds.expiry.tzinfo is None:
                 creds.expiry = creds.expiry.replace(tzinfo=timezone.utc)
+            # Also patch the internal _expiry attribute google-auth uses for comparison
+            if hasattr(creds, '_expiry') and creds._expiry and creds._expiry.tzinfo is None:
+                creds._expiry = creds._expiry.replace(tzinfo=timezone.utc)
 
             # Only refresh when we have a refresh_token and token is expired/near-expiry
             near_expiry = expiry is not None and (expiry - now) < timedelta(minutes=5)
