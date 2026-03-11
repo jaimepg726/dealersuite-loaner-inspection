@@ -1,7 +1,7 @@
 name: Build and commit dist
 on:
   push:
-    branches: ['claude/fix-settings-nav-drive']
+    branches: ['claude/fix-drive-no-refresh-token']
     paths:
       - 'frontend/src/**'
       - 'frontend/package*.json'
