@@ -183,12 +183,32 @@ async def upload_media(
     record.file_url = f"/api/media/{record.id}"
     await db.commit()
 
+    # 6. Attempt Drive upload opportunistically — DB record is the fallback.
+    #    If Drive is connected and upload succeeds, update file_url to the
+    #    Drive URL so there is a permanent off-DB copy as well.
+    final_backend = "database"
+    try:
+        from storage.drive_backend import GoogleDriveBackend
+        drive = GoogleDriveBackend(db)
+        creds = await drive._get_credentials()
+        if creds:
+            folder_hint = "inspections" if media_type == "video" else "damage"
+            drive_filename = file.filename or f"{media_type}_{record.id}"
+            drive_result = await drive.upload_file(content, drive_filename, content_type, folder_hint)
+            if drive_result.success and drive_result.file_url:
+                record.file_url = drive_result.file_url
+                await db.commit()
+                final_backend = "drive"
+                logger.info("Drive upload succeeded for media %d: %s", record.id, drive_result.file_url)
+    except Exception as exc:
+        logger.warning("Drive upload skipped for media %d: %s", record.id, exc)
+
     return UploadResponse(
         file_id=str(record.id),
         file_url=record.file_url,
         filename=file.filename or f"{media_type}_{record.id}",
         bytes_uploaded=len(content),
-        backend="database",
+        backend=final_backend,
     )
 
 

@@ -75,66 +75,82 @@ class GoogleDriveBackend(StorageBackend):
             return False
 
     async def _get_credentials(self):
-        """Build google.oauth2.credentials.Credentials from stored tokens."""
-        from services.settings_service import (
-            get_setting,
-            set_setting,
-            KEY_GOOGLE_ACCESS_TOKEN,
-            KEY_GOOGLE_REFRESH_TOKEN,
-            KEY_GOOGLE_TOKEN_EXPIRY,
-        )
-        from config import get_settings
-        cfg = get_settings()
+        """Build google.oauth2.credentials.Credentials from stored tokens.
 
-        access_token = await get_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN)
-        refresh_token = await get_setting(self._db, KEY_GOOGLE_REFRESH_TOKEN)
-        expiry_str = await get_setting(self._db, KEY_GOOGLE_TOKEN_EXPIRY)
+        Wraps everything in try/except so any unexpected error (e.g. a
+        timezone comparison crash) returns None instead of propagating.
+        """
+        try:
+            from services.settings_service import (
+                get_setting,
+                set_setting,
+                KEY_GOOGLE_ACCESS_TOKEN,
+                KEY_GOOGLE_REFRESH_TOKEN,
+                KEY_GOOGLE_TOKEN_EXPIRY,
+            )
+            from config import get_settings
+            cfg = get_settings()
 
-        if not access_token or not refresh_token:
-            return None
+            access_token = await get_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN)
+            refresh_token = await get_setting(self._db, KEY_GOOGLE_REFRESH_TOKEN)
+            expiry_str = await get_setting(self._db, KEY_GOOGLE_TOKEN_EXPIRY)
 
-        from google.oauth2.credentials import Credentials
-        from google.auth.transport.requests import Request as GoogleRequest
-
-        expiry = None
-        if expiry_str:
-            try:
-                expiry = datetime.fromisoformat(expiry_str)
-            except ValueError:
-                pass
-
-        creds = Credentials(
-            token=access_token,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=cfg.google_client_id,
-            client_secret=cfg.google_client_secret,
-            expiry=expiry,
-        )
-
-        # Refresh if expired (or nearly)
-        if creds.expired or (
-            expiry and expiry - datetime.now(timezone.utc) < timedelta(minutes=5)
-        ):
-            try:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    None, lambda: creds.refresh(GoogleRequest())
-                )
-                await set_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN, creds.token)
-                if creds.expiry:
-                    await set_setting(
-                        self._db,
-                        KEY_GOOGLE_TOKEN_EXPIRY,
-                        creds.expiry.isoformat(),
-                    )
-                await self._db.commit()
-                logger.info("Drive: access token refreshed successfully")
-            except Exception as exc:
-                logger.error("Drive: token refresh failed - %s", exc)
+            if not access_token or not refresh_token:
                 return None
 
-        return creds
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request as GoogleRequest
+
+            expiry = None
+            if expiry_str:
+                try:
+                    expiry = datetime.fromisoformat(expiry_str)
+                except ValueError:
+                    pass
+
+            creds = Credentials(
+                token=access_token,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=cfg.google_client_id,
+                client_secret=cfg.google_client_secret,
+                expiry=expiry,
+            )
+
+            # Patch naive expiry datetimes to UTC-aware so google-auth's
+            # creds.expired check never raises "can't compare offset-naive
+            # and offset-aware datetimes".
+            if creds.expiry and creds.expiry.tzinfo is None:
+                creds.expiry = creds.expiry.replace(tzinfo=timezone.utc)
+            if expiry and expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+
+            # Refresh if expired (or nearly)
+            if creds.expired or (
+                expiry and expiry - datetime.now(timezone.utc) < timedelta(minutes=5)
+            ):
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        None, lambda: creds.refresh(GoogleRequest())
+                    )
+                    await set_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN, creds.token)
+                    if creds.expiry:
+                        await set_setting(
+                            self._db,
+                            KEY_GOOGLE_TOKEN_EXPIRY,
+                            creds.expiry.isoformat(),
+                        )
+                    await self._db.commit()
+                    logger.info("Drive: access token refreshed successfully")
+                except Exception as exc:
+                    logger.error("Drive: token refresh failed - %s", exc)
+                    return None
+
+            return creds
+        except Exception as exc:
+            logger.error("Drive: _get_credentials unexpected error - %s", exc)
+            return None
 
     def _build_service(self, creds):
         from googleapiclient.discovery import build

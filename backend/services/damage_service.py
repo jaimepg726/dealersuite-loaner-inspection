@@ -3,15 +3,47 @@ DealerSuite — Damage Service
 Managers review damage items, assign RO numbers, and track repair status.
 """
 
+from collections import defaultdict
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
-from models.damage     import Damage, DamageStatus
-from models.inspection import Inspection
-from models.vehicle    import Vehicle
-from schemas.damage    import DamageUpdate
+from models.damage           import Damage, DamageStatus
+from models.inspection       import Inspection
+from models.inspection_media import InspectionMedia
+from models.vehicle          import Vehicle
+from schemas.damage          import DamageUpdate
+
+
+async def _attach_media(db: AsyncSession, damages: list) -> None:
+    """Batch-load inspection photos and attach to each damage object.
+
+    Each damage item in a given inspection shows the inspection's photos
+    so the manager can see them alongside the damage record.  One query
+    for all inspection IDs avoids N+1 round-trips.
+    """
+    if not damages:
+        return
+
+    inspection_ids = list({d.inspection_id for d in damages})
+    rows = (await db.execute(
+        select(InspectionMedia)
+        .where(
+            InspectionMedia.inspection_id.in_(inspection_ids),
+            InspectionMedia.media_type == "photo",
+            InspectionMedia.file_url.like("/api/media/%"),
+        )
+        .order_by(InspectionMedia.created_at.asc())
+    )).scalars().all()
+
+    by_inspection: dict = defaultdict(list)
+    for m in rows:
+        by_inspection[m.inspection_id].append(m)
+
+    for damage in damages:
+        damage.media = by_inspection.get(damage.inspection_id, [])
 
 
 async def create_damage(
@@ -66,6 +98,7 @@ async def list_damages(
         .limit(limit)
     )
     rows = (await db.execute(query)).scalars().all()
+    await _attach_media(db, rows)
     return total, list(rows)
 
 
@@ -78,6 +111,7 @@ async def get_damage_by_id(db: AsyncSession, damage_id: int) -> Damage:
     damage = result.scalar_one_or_none()
     if not damage:
         raise HTTPException(status_code=404, detail="Damage record not found")
+    await _attach_media(db, [damage])
     return damage
 
 
