@@ -25,7 +25,7 @@ function SectionTitle({ children }) {
   )
 }
 
-// ── Drive status card ─────────────────────────────────────────────────────────
+// ââ Drive status card âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function DriveSection() {
   const [status,  setStatus]  = useState(null)
   const [loading, setLoading] = useState(true)
@@ -131,7 +131,7 @@ function DriveSection() {
           {!connected && (
             <p className="text-gray-500 text-xs mt-0.5">
               {status?.connected
-                ? 'Token needs refresh — reconnect to restore Drive uploads'
+                ? 'Token needs refresh â reconnect to restore Drive uploads'
                 : 'Connect Google Drive to store inspection videos & damage photos'}
             </p>
           )}
@@ -194,9 +194,9 @@ function DriveSection() {
   )
 }
 
-// ── System Status section ──────────────────────────────────────────────────────
+// ââ System Status section ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function SystemStatusSection() {
-  const [status,  setStatus]  = useState(null)
+  const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -206,41 +206,16 @@ function SystemStatusSection() {
       .finally(() => setLoading(false))
   }, [])
 
+  // backend returns: { database:"ok", storage_mode:"drive", google_drive_connected:bool, version:"1.0" }
   const cards = status ? [
-    {
-      label: 'API Status',
-      value: status.api_status === 'ok' ? 'Online' : status.api_status,
-      ok: status.api_status === 'ok',
-      icon: <Activity className="w-4 h-4" />,
-    },
-    {
-      label: 'Database',
-      value: status.database === 'connected' ? 'Connected' : 'Error',
-      ok: status.database === 'connected',
-      icon: <Database className="w-4 h-4" />,
-    },
-    {
-      label: 'Storage Mode',
-      value: status.storage_mode === 'google_drive' ? 'Google Drive' : 'Local',
-      ok: true,
-      icon: <HardDrive className="w-4 h-4" />,
-    },
-    {
-      label: 'Google Drive',
-      value: status.google_drive_connected ? 'Connected' : 'Not Connected',
-      ok: status.google_drive_connected,
-      icon: <CheckCircle className="w-4 h-4" />,
-    },
-    {
-      label: 'Backend Version',
-      value: status.backend_version,
-      ok: true,
-      icon: <Settings className="w-4 h-4" />,
-    },
+    { label: 'API Status',     value: 'Online',                                          ok: true,                        icon: <Activity className="w-4 h-4" /> },
+    { label: 'Database',       value: status.database === 'ok' ? 'Connected' : 'Error',  ok: status.database === 'ok',    icon: <Database className="w-4 h-4" /> },
+    { label: 'Storage Mode',   value: status.storage_mode === 'drive' ? 'Google Drive' : 'Local', ok: true,              icon: <HardDrive className="w-4 h-4" /> },
+    { label: 'Google Drive',   value: status.google_drive_connected ? 'Connected' : 'Not Connected', ok: status.google_drive_connected, icon: <CheckCircle className="w-4 h-4" /> },
+    { label: 'Backend Version',value: status.version || '1.0',                           ok: true,                        icon: <Settings className="w-4 h-4" /> },
   ] : []
 
   if (loading) return <div className="card h-32 animate-pulse bg-brand-mid" />
-
   if (!status) return (
     <div className="card flex items-center gap-3 text-red-400 text-sm">
       <WifiOff className="w-5 h-5 shrink-0" />
@@ -265,7 +240,6 @@ function SystemStatusSection() {
   )
 }
 
-// ── Demo Mode section ─────────────────────────────────────────────────────────
 function DemoModeSection() {
   const [demoActive, setDemoActive] = useState(false)
   const [loading,    setLoading]    = useState(true)
@@ -333,7 +307,7 @@ function DemoModeSection() {
   )
 }
 
-// ── Add-User modal ────────────────────────────────────────────────────────────
+// ââ Add-User modal ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'porter' }
 
 function AddUserModal({ onClose, onCreated }) {
@@ -421,7 +395,7 @@ function AddUserModal({ onClose, onCreated }) {
           <button type="submit" disabled={busy}
             className="w-full py-4 bg-brand-blue text-white rounded-2xl font-extrabold text-base active:scale-[.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 mt-1">
             {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-            {busy ? 'Creating…' : 'Create Account'}
+            {busy ? 'Creatingâ¦' : 'Create Account'}
           </button>
         </form>
       </div>
@@ -429,7 +403,7 @@ function AddUserModal({ onClose, onCreated }) {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ââ Main page âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function SettingsPage() {
   const { user: me } = useAuth()
   const [users,        setUsers]        = useState([])
@@ -512,7 +486,7 @@ export default function SettingsPage() {
               { label: 'Managers', value: managerCount, color: 'text-purple-400'  },
             ].map(({ label, value, color }) => (
               <div key={label} className="card py-3 text-center">
-                <p className={`text-2xl font-extrabold ${color}`}>{usersLoading ? '…' : value}</p>
+                <p className={`text-2xl font-extrabold ${color}`}>{usersLoading ? 'â¦' : value}</p>
                 <p className="text-gray-500 text-xs mt-0.5">{label}</p>
               </div>
             ))}
