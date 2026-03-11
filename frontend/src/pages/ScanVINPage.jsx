@@ -39,9 +39,9 @@ export default function ScanVINPage() {
 
   const { loading, error, lookup, lookupByLoaner, reset } = useVehicleLookup()
 
-  // Navigate directly to camera - no confirm, no type selection
+  // Navigate to type selection so porter can choose Checkout, Check-In, etc.
   function openCamera(vehicle) {
-    navigate(`/inspect/checkout/${vehicle.id}`, { state: { vehicle } })
+    navigate('/select-type', { state: { vehicle } })
   }
 
   // Called by any VIN scanner when a VIN is detected

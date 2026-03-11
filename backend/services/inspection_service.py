@@ -14,6 +14,16 @@ from models.vehicle    import Vehicle
 from models.user       import User
 from schemas.inspection import InspectionStart
 
+# Canonical inspection_type values stored in the DB.
+# Accepts any casing from the frontend and normalises to title-case so
+# dashboard filters and stats always match regardless of client input.
+_TYPE_NORM: dict[str, str] = {
+    "checkout":  "Checkout",
+    "checkin":   "Checkin",
+    "inventory": "Inventory",
+    "sales":     "Sales",
+}
+
 
 async def start_inspection(
     db: AsyncSession,
@@ -27,11 +37,14 @@ async def start_inspection(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
+    # Normalise to canonical title-case so dashboard filters and stats match.
+    norm_type = _TYPE_NORM.get(data.inspection_type.lower(), data.inspection_type.capitalize())
+
     inspection = Inspection(
         vehicle_id      = data.vehicle_id,
         inspector_id    = current_user.id,
         inspector_name  = current_user.name,
-        inspection_type = data.inspection_type,
+        inspection_type = norm_type,
         status          = InspectionStatus.in_progress,
         started_at      = datetime.now(timezone.utc),
     )
@@ -96,7 +109,9 @@ async def list_inspections(
     if status:
         filters.append(Inspection.status == status)
     if inspection_type:
-        filters.append(Inspection.inspection_type == inspection_type)
+        # Normalise the filter value so "checkout" matches "Checkout" in the DB
+        norm_filter = _TYPE_NORM.get(inspection_type.lower(), inspection_type.capitalize())
+        filters.append(Inspection.inspection_type == norm_filter)
     if vehicle_id:
         filters.append(Inspection.vehicle_id == vehicle_id)
     if days:
@@ -179,7 +194,8 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         )
     ).scalar_one()
 
-    # Breakdown by type (this month)
+    # Breakdown by type (this month) — normalise keys to canonical title-case
+    # so the frontend TYPE_COLOR map and ReportsPage always find a match.
     type_rows = (
         await db.execute(
             select(Inspection.inspection_type, func.count(Inspection.id))
@@ -187,7 +203,10 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
             .group_by(Inspection.inspection_type)
         )
     ).all()
-    by_type = {row[0]: row[1] for row in type_rows}
+    by_type: dict[str, int] = {}
+    for raw_type, cnt in type_rows:
+        canonical = _TYPE_NORM.get((raw_type or "").lower(), (raw_type or "").capitalize())
+        by_type[canonical] = by_type.get(canonical, 0) + cnt
 
     return {
         "total_inspections": total_inspections,
