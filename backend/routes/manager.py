@@ -1,19 +1,19 @@
 """
-DealerSuite — Manager Dashboard Routes
+DealerSuite â Manager Dashboard Routes
 
-GET  /api/manager/stats                  → dashboard KPI summary
-GET  /api/manager/inspections            → paginated inspection list
-GET  /api/manager/inspections/{id}       → single inspection detail
-GET  /api/manager/damage                 → damage review queue
-PATCH /api/manager/damage/{id}           → assign RO / update status
-GET  /api/manager/reports                → aggregate report data
+GET  /api/manager/stats                  â dashboard KPI summary
+GET  /api/manager/inspections            â paginated inspection list
+GET  /api/manager/inspections/{id}       â single inspection detail
+GET  /api/manager/damage                 â damage review queue
+PATCH /api/manager/damage/{id}           â assign RO / update status
+GET  /api/manager/reports                â aggregate report data
 
-── Stage 10: User Management & Settings ──────────────────────────────────────
-GET    /api/manager/users                → list all users
-POST   /api/manager/users                → create a new porter / manager
-PATCH  /api/manager/users/{id}           → update user (name, role, active, password)
-DELETE /api/manager/users/{id}           → soft-deactivate a user
-GET    /api/manager/drive-status         → Google Drive connection health check
+ââ Stage 10: User Management & Settings ââââââââââââââââââââââââââââââââââââââ
+GET    /api/manager/users                â list all users
+POST   /api/manager/users                â create a new porter / manager
+PATCH  /api/manager/users/{id}           â update user (name, role, active, password)
+DELETE /api/manager/users/{id}           â soft-deactivate a user
+GET    /api/manager/drive-status         â Google Drive connection health check
 """
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -134,7 +134,7 @@ async def route_reports(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 — User Management (admin & manager access)
+# Stage 10 â User Management (admin & manager access)
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -299,7 +299,7 @@ async def route_deactivate_user(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 — Google Drive status
+# Stage 10 â Google Drive status
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -311,7 +311,7 @@ async def route_drive_status(
 ):
     """
     Returns whether Google Drive is configured and can authenticate.
-    Does not make a live API call — just checks whether credentials exist.
+    Does not make a live API call â just checks whether credentials exist.
     """
     from config import get_settings
     settings = get_settings()
@@ -329,4 +329,62 @@ async def route_drive_status(
             "file"      if __import__("os").path.exists(settings.google_service_account_file) else
             "none"
         ),
+    }
+
+
+@router.get("/inspections/{inspection_id}/frame-match")
+async def get_frame_match(
+    inspection_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Compare checkout vs checkin media for a vehicle to surface new damage.
+    Finds the previous checkout inspection for the same vehicle and returns
+    both sets of media side-by-side for visual comparison.
+    """
+    from sqlalchemy import select as sa_select
+    from models.inspection import Inspection
+    from models.inspection_media import InspectionMedia
+
+    # Load the requested inspection
+    insp = await db.get(Inspection, inspection_id)
+    if not insp:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+
+    # Find the matching pair: if this is a checkin, find the last checkout; vice versa
+    target_type = "checkout" if insp.inspection_type.lower() == "checkin" else "checkin"
+    stmt = (
+        sa_select(Inspection)
+        .where(
+            Inspection.vehicle_id == insp.vehicle_id,
+            Inspection.inspection_type.ilike(target_type),
+            Inspection.id != inspection_id,
+        )
+        .order_by(Inspection.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    paired = result.scalar_one_or_none()
+
+    # Load media for both inspections
+    async def load_media(iid):
+        res = await db.execute(
+            sa_select(InspectionMedia).where(InspectionMedia.inspection_id == iid)
+        )
+        rows = res.scalars().all()
+        return [{"id": m.id, "file_url": m.file_url, "media_type": m.media_type, "created_at": str(m.created_at)} for m in rows]
+
+    current_media = await load_media(inspection_id)
+    paired_media = await load_media(paired.id) if paired else []
+
+    return {
+        "inspection_id": inspection_id,
+        "inspection_type": insp.inspection_type,
+        "vehicle_id": insp.vehicle_id,
+        "paired_inspection_id": paired.id if paired else None,
+        "paired_type": paired.inspection_type if paired else None,
+        "current_media": current_media,
+        "paired_media": paired_media,
+        "has_pair": paired is not None,
     }
