@@ -1,9 +1,9 @@
 /**
- * DealerSuite — Inspection Detail Page
+ * DealerSuite â Inspection Detail Page
  * Displays vehicle info, loaner number, inspector, damage notes, and media gallery.
  * Accessed from InspectionsPage when a card is tapped.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Video, AlertTriangle, X, Loader } from 'lucide-react'
 import api from '../../utils/api'
@@ -26,7 +26,7 @@ function extractDriveFileId(url) {
  */
 function toDriveViewUrl(url) {
   if (!url) return url
-  // Already a direct uc link — return as-is
+  // Already a direct uc link â return as-is
   if (url.includes('drive.google.com/uc')) return url
   const fileId = extractDriveFileId(url)
   if (fileId) return `https://drive.google.com/uc?id=${fileId}&export=view`
@@ -43,12 +43,11 @@ function toDriveThumbnailUrl(url) {
 /** Single photo thumbnail with loading spinner and DB fallback on error. */
 function PhotoThumb({ m, onOpen }) {
   const [loading, setLoading] = useState(true)
-  const [useFallback, setUseFallback] = useState(false)
-  const src = useFallback ? `/api/media/${m.id}` : toDriveViewUrl(m.file_url)
+  const imgRef = useRef(null)
 
   return (
     <button
-      onClick={() => onOpen(src)}
+      onClick={() => onOpen(imgRef.current?.src || toDriveViewUrl(m.file_url))}
       className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
                  hover:border-brand-blue/60 transition-colors relative"
     >
@@ -58,12 +57,13 @@ function PhotoThumb({ m, onOpen }) {
         </div>
       )}
       <img
-        src={src}
+        ref={imgRef}
+        src={toDriveViewUrl(m.file_url)}
         alt="Inspection photo"
         className="w-full h-full object-cover"
         loading="lazy"
         onLoad={() => setLoading(false)}
-        onError={() => { if (!useFallback) { setUseFallback(true) } else { setLoading(false) } }}
+        onError={(e) => { e.target.onerror = null; e.target.src = `/api/media/${m.id}` }}
       />
     </button>
   )
@@ -72,9 +72,6 @@ function PhotoThumb({ m, onOpen }) {
 /** Single video player with loading spinner, poster thumbnail, and DB fallback on error. */
 function VideoPlayer({ m }) {
   const [loading, setLoading] = useState(true)
-  const [useFallback, setUseFallback] = useState(false)
-  const src = useFallback ? `/api/media/${m.id}` : toDriveViewUrl(m.file_url)
-  const poster = useFallback ? undefined : toDriveThumbnailUrl(m.file_url)
 
   return (
     <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative">
@@ -84,13 +81,13 @@ function VideoPlayer({ m }) {
         </div>
       )}
       <video
-        src={src}
-        poster={poster}
+        src={toDriveViewUrl(m.file_url)}
+        poster={toDriveThumbnailUrl(m.file_url)}
         controls
         preload="metadata"
         className="w-full max-h-56 object-contain"
         onLoadedMetadata={() => setLoading(false)}
-        onError={() => { if (!useFallback) { setUseFallback(true); setLoading(true) } else { setLoading(false) } }}
+        onError={(e) => { e.target.onerror = null; e.target.src = `/api/media/${m.id}` }}
       />
     </div>
   )
@@ -179,7 +176,7 @@ const STATUS_COLOR = {
 }
 
 function formatDate(iso) {
-  if (!iso) return '—'
+  if (!iso) return 'â'
   return new Date(iso).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -262,7 +259,7 @@ export default function InspectionDetail() {
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${typeCls}`}>
               {inspection.inspection_type}
             </span>
-            <span className={`text-xs font-semibold ${statusCls}`}>● {inspection.status}</span>
+            <span className={`text-xs font-semibold ${statusCls}`}>â {inspection.status}</span>
           </div>
 
           {vehicle ? (
