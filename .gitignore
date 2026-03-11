@@ -13,8 +13,7 @@ build/
 # Node / React
 node_modules/
 .vite/
-# frontend/dist is committed so Railway always serves the latest bundle
-!frontend/dist
+frontend/dist
 .env.local
 .env.development.local
 .env.test.local

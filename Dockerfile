@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Install deps first (layer-cached unless package.json changes)
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm ci
+RUN cd frontend && npm install
 
 # Copy source (invalidates layer on ANY frontend change, triggering rebuild)
 COPY frontend/ ./frontend/

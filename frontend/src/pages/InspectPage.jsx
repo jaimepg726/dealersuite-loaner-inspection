@@ -249,6 +249,20 @@ export default function InspectPage() {
             </p>
           </div>
 
+          {/* Confirmation banners */}
+          <div className="flex flex-col gap-2 w-full max-w-xs">
+            <div className="flex items-center gap-3 bg-green-900/40 border border-green-700
+                            rounded-xl px-4 py-2.5">
+              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+              <span className="text-green-300 text-sm font-semibold">Inspection Saved</span>
+            </div>
+            <div className="flex items-center gap-3 bg-green-900/40 border border-green-700
+                            rounded-xl px-4 py-2.5">
+              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+              <span className="text-green-300 text-sm font-semibold">Media Uploaded</span>
+            </div>
+          </div>
+
           {inspection?.drive_folder_url && (
             <a
               href={inspection.drive_folder_url}
