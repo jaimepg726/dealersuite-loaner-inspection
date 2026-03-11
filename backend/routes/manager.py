@@ -1,19 +1,19 @@
 """
-DealerSuite Ã¢ÂÂ Manager Dashboard Routes
+DealerSuite ÃÂ¢ÃÂÃÂ Manager Dashboard Routes
 
-GET  /api/manager/stats                  Ã¢ÂÂ dashboard KPI summary
-GET  /api/manager/inspections            Ã¢ÂÂ paginated inspection list
-GET  /api/manager/inspections/{id}       Ã¢ÂÂ single inspection detail
-GET  /api/manager/damage                 Ã¢ÂÂ damage review queue
-PATCH /api/manager/damage/{id}           Ã¢ÂÂ assign RO / update status
-GET  /api/manager/reports                Ã¢ÂÂ aggregate report data
+GET  /api/manager/stats                  ÃÂ¢ÃÂÃÂ dashboard KPI summary
+GET  /api/manager/inspections            ÃÂ¢ÃÂÃÂ paginated inspection list
+GET  /api/manager/inspections/{id}       ÃÂ¢ÃÂÃÂ single inspection detail
+GET  /api/manager/damage                 ÃÂ¢ÃÂÃÂ damage review queue
+PATCH /api/manager/damage/{id}           ÃÂ¢ÃÂÃÂ assign RO / update status
+GET  /api/manager/reports                ÃÂ¢ÃÂÃÂ aggregate report data
 
-Ã¢ÂÂÃ¢ÂÂ Stage 10: User Management & Settings Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
-GET    /api/manager/users                Ã¢ÂÂ list all users
-POST   /api/manager/users                Ã¢ÂÂ create a new porter / manager
-PATCH  /api/manager/users/{id}           Ã¢ÂÂ update user (name, role, active, password)
-DELETE /api/manager/users/{id}           Ã¢ÂÂ soft-deactivate a user
-GET    /api/manager/drive-status         Ã¢ÂÂ Google Drive connection health check
+ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Stage 10: User Management & Settings ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+GET    /api/manager/users                ÃÂ¢ÃÂÃÂ list all users
+POST   /api/manager/users                ÃÂ¢ÃÂÃÂ create a new porter / manager
+PATCH  /api/manager/users/{id}           ÃÂ¢ÃÂÃÂ update user (name, role, active, password)
+DELETE /api/manager/users/{id}           ÃÂ¢ÃÂÃÂ soft-deactivate a user
+GET    /api/manager/drive-status         ÃÂ¢ÃÂÃÂ Google Drive connection health check
 """
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -134,7 +134,7 @@ async def route_reports(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 Ã¢ÂÂ User Management (admin & manager access)
+# Stage 10 ÃÂ¢ÃÂÃÂ User Management (admin & manager access)
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -299,7 +299,7 @@ async def route_deactivate_user(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 Ã¢ÂÂ Google Drive status
+# Stage 10 ÃÂ¢ÃÂÃÂ Google Drive status
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -311,7 +311,7 @@ async def route_drive_status(
 ):
     """
     Returns whether Google Drive is configured and can authenticate.
-    Does not make a live API call Ã¢ÂÂ just checks whether credentials exist.
+    Does not make a live API call ÃÂ¢ÃÂÃÂ just checks whether credentials exist.
     """
     from config import get_settings
     settings = get_settings()
@@ -338,45 +338,36 @@ async def get_frame_match(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_manager),
 ):
-    """
-    Compare checkout vs checkin media for a vehicle to surface new damage.
-    Finds the previous checkout inspection for the same vehicle and returns
-    both sets of media side-by-side for visual comparison.
-    """
-    from sqlalchemy import select as sa_select
-    from models.inspection import Inspection
-    from models.inspection_media import InspectionMedia
+    """Compare checkout vs checkin for same vehicle - show before/after media."""
+    from sqlalchemy import select as _sel, func as _func
+    from models.inspection import Inspection as _Insp
+    from models.inspection_media import InspectionMedia as _Media
 
-    # Load the requested inspection
-    insp = await db.get(Inspection, inspection_id)
+    insp = await db.get(_Insp, inspection_id)
     if not insp:
         raise HTTPException(status_code=404, detail="Inspection not found")
 
-    # Find the matching pair: if this is a checkin, find the last checkout; vice versa
-    target_type = "checkout" if insp.inspection_type.lower() == "checkin" else "checkin"
+    # Match: checkin pairs with checkout and vice versa
+    cur_type = (insp.inspection_type or "").lower()
+    pair_type = "Checkout" if cur_type == "checkin" else "Checkin"
+
     stmt = (
-        sa_select(Inspection)
+        _sel(_Insp)
         .where(
-            Inspection.vehicle_id == insp.vehicle_id,
-            Inspection.inspection_type.ilike(target_type),
-            Inspection.id != inspection_id,
+            _Insp.vehicle_id == insp.vehicle_id,
+            _func.lower(_Insp.inspection_type) == pair_type.lower(),
+            _Insp.id != inspection_id,
         )
-        .order_by(Inspection.created_at.desc())
+        .order_by(_Insp.id.desc())
         .limit(1)
     )
-    result = await db.execute(stmt)
-    paired = result.scalar_one_or_none()
+    paired = (await db.execute(stmt)).scalar_one_or_none()
 
-    # Load media for both inspections
-    async def load_media(iid):
-        res = await db.execute(
-            sa_select(InspectionMedia).where(InspectionMedia.inspection_id == iid)
-        )
-        rows = res.scalars().all()
-        return [{"id": m.id, "file_url": m.file_url, "media_type": m.media_type, "created_at": str(m.created_at)} for m in rows]
-
-    current_media = await load_media(inspection_id)
-    paired_media = await load_media(paired.id) if paired else []
+    async def _media(iid):
+        rows = (await db.execute(
+            _sel(_Media).where(_Media.inspection_id == iid)
+        )).scalars().all()
+        return [{"id": m.id, "file_url": m.file_url, "media_type": m.media_type} for m in rows]
 
     return {
         "inspection_id": inspection_id,
@@ -384,7 +375,7 @@ async def get_frame_match(
         "vehicle_id": insp.vehicle_id,
         "paired_inspection_id": paired.id if paired else None,
         "paired_type": paired.inspection_type if paired else None,
-        "current_media": current_media,
-        "paired_media": paired_media,
+        "current_media": await _media(inspection_id),
+        "paired_media": await _media(paired.id) if paired else [],
         "has_pair": paired is not None,
     }
