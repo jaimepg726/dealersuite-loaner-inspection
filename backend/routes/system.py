@@ -1,4 +1,4 @@
-"""DealerSuite â System Status Route
+"""DealerSuite Ã¢ÂÂ System Status Route
 GET /api/system/status  -> health snapshot for the Settings UI
 """
 from fastapi import APIRouter, Depends
@@ -24,7 +24,7 @@ async def system_status(
     except Exception:
         database = "error"
 
-    # Google Drive token presence â storage mode
+    # Google Drive token presence Ã¢ÂÂ storage mode
     token = await get_setting(db, KEY_GOOGLE_ACCESS_TOKEN)
     google_drive_connected = bool(token)
 
