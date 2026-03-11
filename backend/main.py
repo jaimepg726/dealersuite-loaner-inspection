@@ -2,6 +2,7 @@
 DealerSuite Loaner Inspection — FastAPI Entry Point
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
@@ -10,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from config import get_settings
-from database import engine, Base
+from database import engine, Base, AsyncSessionLocal
 
 # Route modules
 from routes.auth     import router as auth_router
@@ -34,6 +35,8 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     await run_migrations(engine)
+    from services.token_refresh_service import start_background_refresh
+    asyncio.create_task(start_background_refresh(AsyncSessionLocal))
     yield
     await engine.dispose()
 

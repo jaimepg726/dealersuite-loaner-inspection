@@ -135,6 +135,10 @@ class GoogleDriveBackend(StorageBackend):
                         None, lambda: creds.refresh(GoogleRequest())
                     )
                     await set_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN, creds.token)
+                    if creds.refresh_token:
+                        # google-auth occasionally rotates the refresh token;
+                        # persist the new one so we never lose offline access.
+                        await set_setting(self._db, KEY_GOOGLE_REFRESH_TOKEN, creds.refresh_token)
                     if creds.expiry:
                         await set_setting(
                             self._db,
