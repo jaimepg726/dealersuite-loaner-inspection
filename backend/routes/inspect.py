@@ -26,7 +26,7 @@ from services.inspection_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_UPLOAD_BYTES = 512 * 1024 * 1024  # 512 MB
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 class CompleteBody(BaseModel):
@@ -144,7 +144,7 @@ async def upload_media(
 
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds the 512 MB limit")
+        raise HTTPException(status_code=413, detail="File exceeds the 100 MB limit")
 
     # 2 & 3. Validate MIME type and determine media_type from content_type.
     # Strip codec parameters (e.g. "video/webm;codecs=vp9" → "video/webm") before
@@ -184,6 +184,7 @@ async def upload_media(
     await db.commit()
 
     # 6. Attempt Drive upload opportunistically — DB record is the fallback.
+    #    Retry once if the first attempt fails (network hiccup, token refresh, etc.).
     #    If Drive is connected and upload succeeds, update file_url to the
     #    Drive URL so there is a permanent off-DB copy as well.
     final_backend = "database"
@@ -194,8 +195,17 @@ async def upload_media(
         if creds:
             folder_hint = "inspections" if media_type == "video" else "damage"
             drive_filename = file.filename or f"{media_type}_{record.id}"
-            drive_result = await drive.upload_file(content, drive_filename, content_type, folder_hint)
-            if drive_result.success and drive_result.file_url:
+            drive_result = None
+            for attempt in range(2):
+                try:
+                    drive_result = await drive.upload_file(content, drive_filename, content_type, folder_hint)
+                    if drive_result.success:
+                        break
+                except Exception as upload_exc:
+                    logger.warning("Drive upload attempt %d failed for media %d: %s", attempt + 1, record.id, upload_exc)
+                    if attempt == 1:
+                        raise
+            if drive_result and drive_result.success and drive_result.file_url:
                 record.file_url = drive_result.file_url
                 await db.commit()
                 final_backend = "drive"

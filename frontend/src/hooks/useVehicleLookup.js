@@ -23,9 +23,26 @@ export default function useVehicleLookup() {
       return data
     } catch (err) {
       const msg =
-        err.response?.status === 404
-          ? `VIN ${vin} is not in the fleet. Ask your manager to add it first.`
-          : err.response?.data?.detail || 'Could not look up vehicle. Check your connection.'
+        err.response?.data?.detail || 'Could not look up vehicle. Check your connection.'
+      setError(msg)
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const lookupByLoaner = useCallback(async (loanerNumber) => {
+    setLoading(true)
+    setError(null)
+    setVehicle(null)
+
+    try {
+      const { data } = await api.get(`/api/vehicles/loaner/${encodeURIComponent(loanerNumber)}`)
+      setVehicle(data)
+      return data
+    } catch (err) {
+      const msg =
+        err.response?.data?.detail || 'Could not look up loaner. Check your connection.'
       setError(msg)
       return null
     } finally {
@@ -38,5 +55,5 @@ export default function useVehicleLookup() {
     setError(null)
   }, [])
 
-  return { vehicle, loading, error, lookup, reset }
+  return { vehicle, loading, error, lookup, lookupByLoaner, reset }
 }

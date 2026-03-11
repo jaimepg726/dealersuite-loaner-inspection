@@ -19,6 +19,7 @@ import {
   AlertCircle,
   ExternalLink,
   Home,
+  Video,
 } from 'lucide-react'
 import api            from '../utils/api'
 import PageHeader     from '../components/ui/PageHeader'
@@ -64,10 +65,11 @@ export default function InspectPage() {
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
   const apiType  = TYPE_API_MAP[type] || 'Checkout'
 
-  const [phase,       setPhase]       = useState('init')
-  const [uploadSteps, setUploadSteps] = useState([])
-  const [uploadPct,   setUploadPct]   = useState(0)
-  const [uploadError, setUploadError] = useState(null)
+  const [phase,         setPhase]         = useState('init')
+  const [uploadSteps,   setUploadSteps]   = useState([])
+  const [uploadPct,     setUploadPct]     = useState(0)
+  const [uploadError,   setUploadError]   = useState(null)
+  const [mediaUploaded, setMediaUploaded] = useState(false)
 
   // Media captured during recording — held in refs to avoid stale closures
   const videoBlobRef  = useRef(null)
@@ -192,6 +194,7 @@ export default function InspectPage() {
       await complete(totalPhotos)
       mark('done')
 
+      setMediaUploaded(true)
       setPhase('done')
 
     } catch (err) {
@@ -247,6 +250,22 @@ export default function InspectPage() {
             <p className="text-gray-500 text-sm mt-1">
               {inspection?.inspection_type} inspection saved
             </p>
+          </div>
+
+          {/* Upload confirmation banners */}
+          <div className="flex flex-col gap-2 w-full">
+            <div className="flex items-center gap-2 bg-green-900/30 border border-green-700
+                            rounded-xl px-4 py-2.5 text-green-400 font-semibold text-sm">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              Inspection Saved
+            </div>
+            {mediaUploaded && (
+              <div className="flex items-center gap-2 bg-green-900/30 border border-green-700
+                              rounded-xl px-4 py-2.5 text-green-400 font-semibold text-sm">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                Media Uploaded
+              </div>
+            )}
           </div>
 
           {inspection?.drive_folder_url && (
@@ -328,11 +347,23 @@ export default function InspectPage() {
         )}
 
         {phase === 'damage' && (
-          <DamageLogger
-            capturedPhotos={photoBlobsRef.current}
-            onComplete={handleDamageComplete}
-            onSkip={handleSkipDamage}
-          />
+          <>
+            {/* Persistent video button — always visible during damage phase */}
+            <button
+              onClick={() => setPhase('recording')}
+              className="flex items-center gap-2 self-start text-sm font-bold
+                         text-brand-blue bg-brand-blue/10 border border-brand-blue/30
+                         px-4 py-2 rounded-xl active:scale-95 transition-transform"
+            >
+              <Video className="w-4 h-4" />
+              {videoBlobRef.current ? 'Re-record Video' : 'Record Video'}
+            </button>
+            <DamageLogger
+              capturedPhotos={photoBlobsRef.current}
+              onComplete={handleDamageComplete}
+              onSkip={handleSkipDamage}
+            />
+          </>
         )}
 
         {phase === 'uploading' && (

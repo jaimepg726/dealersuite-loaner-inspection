@@ -80,7 +80,7 @@ function MediaGallery({ media }) {
                 className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent"
               >
                 <video
-                  src={m.file_url}
+                  src={toDriveViewUrl(m.file_url)}
                   controls
                   className="w-full max-h-56 object-contain"
                   preload="metadata"

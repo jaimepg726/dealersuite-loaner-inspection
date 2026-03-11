@@ -53,9 +53,28 @@ async def get_vehicle_by_vin(db: AsyncSession, vin: str) -> Vehicle:
     result = await db.execute(select(Vehicle).where(Vehicle.vin == vin))
     vehicle = result.scalar_one_or_none()
     if not vehicle:
+        # Auto-create as unknown vehicle so inspections can still be recorded
+        # for service vehicles, sales vehicles, and customer vehicles.
+        vehicle = Vehicle(
+            vin=vin,
+            vehicle_type="Unknown",
+            status="Active",
+            is_active=True,
+        )
+        db.add(vehicle)
+        await db.flush()
+    return vehicle
+
+
+async def get_vehicle_by_loaner_number(db: AsyncSession, loaner_number: str) -> Vehicle:
+    result = await db.execute(
+        select(Vehicle).where(Vehicle.loaner_number == loaner_number, Vehicle.is_active == True)  # noqa: E712
+    )
+    vehicle = result.scalar_one_or_none()
+    if not vehicle:
         raise HTTPException(
             status_code=404,
-            detail=f"VIN {vin} not found in fleet. Contact your manager to add this vehicle.",
+            detail=f"Loaner #{loaner_number} not found in fleet. Contact your manager.",
         )
     return vehicle
 

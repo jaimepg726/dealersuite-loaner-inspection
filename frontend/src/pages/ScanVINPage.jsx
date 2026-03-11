@@ -11,7 +11,7 @@
 
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanBarcode, Camera, Keyboard } from 'lucide-react'
+import { ScanBarcode, Camera, Keyboard, Hash } from 'lucide-react'
 
 import PageHeader          from '../components/ui/PageHeader'
 import LoadingScreen       from '../components/ui/LoadingScreen'
@@ -25,20 +25,31 @@ const TABS = [
   { id: 'barcode', label: 'Barcode',  Icon: ScanBarcode },
   { id: 'ocr',     label: 'Camera',   Icon: Camera      },
   { id: 'manual',  label: 'Manual',   Icon: Keyboard    },
+  { id: 'loaner',  label: 'Loaner #', Icon: Hash        },
 ]
 
 export default function ScanVINPage() {
   const navigate  = useNavigate()
   const [tab,     setTab]     = useState('barcode')
   const [scanned, setScanned] = useState(null)   // VIN string after detection
+  const [loanerInput, setLoanerInput] = useState('')
 
-  const { vehicle, loading, error, lookup, reset } = useVehicleLookup()
+  const { vehicle, loading, error, lookup, lookupByLoaner, reset } = useVehicleLookup()
 
   // ── Called by any scanner when a VIN is detected ───────────────────────
   const handleVINDetected = useCallback(async (vin) => {
     setScanned(vin)
     await lookup(vin)
   }, [lookup])
+
+  // ── Called when porter submits a loaner number ─────────────────────────
+  async function handleLoanerSubmit(e) {
+    e.preventDefault()
+    const val = loanerInput.trim()
+    if (!val) return
+    setScanned(val)
+    await lookupByLoaner(val)
+  }
 
   // ── Porter taps "No, Rescan" ───────────────────────────────────────────
   function handleReject() {
@@ -52,7 +63,7 @@ export default function ScanVINPage() {
   }
 
   // ── Loading state while API call runs ─────────────────────────────────
-  if (loading) return <LoadingScreen message={`Looking up VIN ${scanned}…`} />
+  if (loading) return <LoadingScreen message={`Looking up ${scanned}…`} />
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
@@ -137,6 +148,35 @@ export default function ScanVINPage() {
             {tab === 'manual' && (
               <div className="flex flex-col gap-3">
                 <ManualVINEntry onDetected={handleVINDetected} />
+              </div>
+            )}
+
+            {/* ── Loaner number tab ────────────────────────────────────── */}
+            {tab === 'loaner' && (
+              <div className="flex flex-col gap-3">
+                <p className="text-gray-400 text-sm text-center">
+                  Enter the loaner number printed on the key tag or dashboard sticker
+                </p>
+                <form onSubmit={handleLoanerSubmit} className="flex flex-col gap-3">
+                  <input
+                    type="text"
+                    value={loanerInput}
+                    onChange={(e) => setLoanerInput(e.target.value)}
+                    placeholder="e.g. L-01"
+                    className="w-full bg-brand-mid border border-brand-accent rounded-2xl
+                               px-4 py-4 text-brand-white text-lg font-bold text-center
+                               placeholder:text-gray-600 focus:outline-none focus:border-brand-blue"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={!loanerInput.trim()}
+                    className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Hash className="w-5 h-5" />
+                    Look Up Loaner
+                  </button>
+                </form>
               </div>
             )}
           </>
