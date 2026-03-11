@@ -330,3 +330,50 @@ async def route_drive_status(
             "none"
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Frame comparison (checkout vs checkin media side-by-side)
+# ---------------------------------------------------------------------------
+
+@router.get("/inspections/{inspection_id}/frame-match")
+async def get_frame_match(
+    inspection_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """Compare checkout vs checkin for same vehicle — show before/after media."""
+    from sqlalchemy import select as _sel, func as _func
+    from models.inspection import Inspection as _Insp
+    from models.inspection_media import InspectionMedia as _Media
+    insp = await db.get(_Insp, inspection_id)
+    if not insp:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    cur_type = (insp.inspection_type or "").lower()
+    pair_type = "Checkout" if cur_type == "checkin" else "Checkin"
+    stmt = (
+        _sel(_Insp)
+        .where(
+            _Insp.vehicle_id == insp.vehicle_id,
+            _func.lower(_Insp.inspection_type) == pair_type.lower(),
+            _Insp.id != inspection_id,
+        )
+        .order_by(_Insp.id.desc())
+        .limit(1)
+    )
+    paired = (await db.execute(stmt)).scalar_one_or_none()
+    async def _media(iid):
+        rows = (await db.execute(
+            _sel(_Media).where(_Media.inspection_id == iid)
+        )).scalars().all()
+        return [{"id": m.id, "file_url": m.file_url, "media_type": m.media_type} for m in rows]
+    return {
+        "inspection_id": inspection_id,
+        "inspection_type": insp.inspection_type,
+        "vehicle_id": insp.vehicle_id,
+        "paired_inspection_id": paired.id if paired else None,
+        "paired_type": paired.inspection_type if paired else None,
+        "current_media": await _media(inspection_id),
+        "paired_media": await _media(paired.id) if paired else [],
+        "has_pair": paired is not None,
+    }
