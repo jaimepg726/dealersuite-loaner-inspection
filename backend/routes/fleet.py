@@ -14,7 +14,7 @@ from dependencies import require_manager, get_current_user
 from models.vehicle import Vehicle
 from models.inspection import Inspection
 from schemas.vehicle import VehicleListResponse, VehicleResponse
-from services.fleet_service import import_fleet_csv as _import_csv
+from services.fleet_import import import_fleet_csv as _import_csv
 from services.vehicle_service import list_vehicles
 
 router = APIRouter()
@@ -47,10 +47,13 @@ async def import_fleet_csv(
 
     result = await _import_csv(contents, db)
 
+    summary = result.to_dict()
+    summary["decommissioned"] = getattr(result, "decommissioned", 0)
+
     return {
         "status":  "completed",
         "filename": file.filename,
-        "summary": result.to_dict(),
+        "summary": summary,
         "imported_by": current_user.name,
     }
 

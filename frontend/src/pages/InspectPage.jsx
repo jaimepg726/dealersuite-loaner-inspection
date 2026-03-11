@@ -29,17 +29,21 @@ import UploadProgress from '../components/inspection/UploadProgress'
 
 // ââ Type config âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const TYPE_LABELS = {
-  checkout:  { label: 'Checkout Inspection',  color: 'text-brand-blue'  },
-  checkin:   { label: 'Check-In Inspection',  color: 'text-brand-green' },
-  inventory: { label: 'Inventory Inspection', color: 'text-purple-400'  },
-  sales:     { label: 'Sales Inspection',     color: 'text-orange-400'  },
+  checkout:   { label: 'Checkout Inspection',  color: 'text-brand-blue'  },
+  checkin:    { label: 'Check-In Inspection',  color: 'text-brand-green' },
+  inventory:  { label: 'Inventory Inspection', color: 'text-purple-400'  },
+  sales:      { label: 'Sales Inspection',     color: 'text-orange-400'  },
+  inspection: { label: 'Inspection',           color: 'text-gray-300'    },
 }
 
+// checkout and checkin values are preserved exactly so frame-matching background
+// tasks continue to trigger correctly (do not rename these values).
 const TYPE_API_MAP = {
-  checkout:  'Checkout',
-  checkin:   'Checkin',
-  inventory: 'Inventory',
-  sales:     'Sales',
+  checkout:   'checkout',
+  checkin:    'checkin',
+  inventory:  'Inventory',
+  sales:      'Sales',
+  inspection: 'inspection',
 }
 
 // ââ Upload step builder âââââââââââââââââââââââââââââââââââââââââââââââââââââââ

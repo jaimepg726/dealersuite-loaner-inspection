@@ -6,9 +6,11 @@ POST /api/inspect/{id}/damage       -> log damage item
 GET  /api/inspect/{id}              -> inspection detail
 """
 import asyncio
+import hashlib
 import logging
 import re
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -167,13 +169,36 @@ async def upload_media(
             detail=f"Unsupported MIME type '{content_type}'. Allowed: {', '.join(sorted(ALLOWED_MIMETYPES))}",
         )
 
-    # 4. Insert media record — store raw bytes in DB (survives redeploys, no /tmp)
+    # 4a. Generate SHA-256 hash and check for duplicate within this inspection
+    file_hash = hashlib.sha256(content).hexdigest()
+    dup_result = await db.execute(
+        select(InspectionMedia).where(
+            InspectionMedia.inspection_id == inspection_id,
+            InspectionMedia.file_hash == file_hash,
+        )
+    )
+    existing_media = dup_result.scalar_one_or_none()
+    if existing_media:
+        logger.info(
+            "Duplicate media skipped for inspection %d (hash=%s, existing id=%d)",
+            inspection_id, file_hash, existing_media.id,
+        )
+        return UploadResponse(
+            file_id=str(existing_media.id),
+            file_url=existing_media.file_url,
+            filename=file.filename or f"{media_type}_{existing_media.id}",
+            bytes_uploaded=len(content),
+            backend="deduplicated",
+        )
+
+    # 4b. Insert media record — store raw bytes in DB (survives redeploys, no /tmp)
     record = InspectionMedia(
         inspection_id=inspection_id,
         file_url="",           # updated below once we have the row ID
         media_type=media_type,
         mime_type=content_type,  # base MIME without codec params
         file_data=content,
+        file_hash=file_hash,
         created_at=_utcnow(),
     )
     db.add(record)

@@ -15,6 +15,7 @@ class InspectionMedia(Base):
     media_type:    Mapped[str]            = mapped_column(String(10), nullable=False)  # "photo" | "video"
     mime_type:     Mapped[Optional[str]]  = mapped_column(String(50), nullable=True)
     file_data:     Mapped[Optional[bytes]]= mapped_column(LargeBinary, nullable=True)
+    file_hash:     Mapped[Optional[str]]  = mapped_column(String(64), nullable=True, index=True)
     created_at:    Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     inspection = relationship("Inspection", back_populates="media", lazy="selectin")

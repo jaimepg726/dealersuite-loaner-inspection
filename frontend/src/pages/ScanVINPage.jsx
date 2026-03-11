@@ -1,186 +1,196 @@
 /**
- * DealerSuite — VIN Scan Page
- * Three methods: Barcode (ZXing) | Camera OCR (Tesseract) | Manual Entry
+ * DealerSuite - Vehicle Identification Page
+ * Two methods: VIN Scan (barcode / OCR / manual) | Loaner Number
  *
  * Flow:
- *   1. Porter picks scan method via tab
- *   2. VIN detected → backend lookup
- *   3. Vehicle confirm card shown
- *   4. Porter confirms → SelectInspectionTypePage
+ *   1. Porter picks identification method via tab
+ *   2. Vehicle found -> inspection created automatically
+ *   3. Camera opens immediately (no confirmation screens)
  */
 
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanBarcode, Camera, Keyboard, Hash } from 'lucide-react'
+import { ScanBarcode, Hash, Camera, Keyboard } from 'lucide-react'
 
 import PageHeader          from '../components/ui/PageHeader'
 import LoadingScreen       from '../components/ui/LoadingScreen'
 import BarcodeScanner      from '../components/inspection/BarcodeScanner'
 import OCRScanner          from '../components/inspection/OCRScanner'
 import ManualVINEntry      from '../components/inspection/ManualVINEntry'
-import VehicleConfirmCard  from '../components/inspection/VehicleConfirmCard'
 import useVehicleLookup    from '../hooks/useVehicleLookup'
 
-const TABS = [
-  { id: 'barcode', label: 'Barcode',  Icon: ScanBarcode },
-  { id: 'ocr',     label: 'Camera',   Icon: Camera      },
-  { id: 'manual',  label: 'Manual',   Icon: Keyboard    },
-  { id: 'loaner',  label: 'Loaner #', Icon: Hash        },
+const MAIN_TABS = [
+  { id: 'vin',    label: 'VIN Scan',      Icon: ScanBarcode },
+  { id: 'loaner', label: 'Loaner Number', Icon: Hash        },
+]
+
+const VIN_METHODS = [
+  { id: 'barcode', label: 'Barcode', Icon: ScanBarcode },
+  { id: 'ocr',     label: 'Camera',  Icon: Camera      },
+  { id: 'manual',  label: 'Manual',  Icon: Keyboard    },
 ]
 
 export default function ScanVINPage() {
   const navigate  = useNavigate()
-  const [tab,     setTab]     = useState('barcode')
-  const [scanned, setScanned] = useState(null)   // VIN string after detection
+  const [tab,         setTab]         = useState('vin')
+  const [vinMethod,   setVinMethod]   = useState('barcode')
+  const [scanned,     setScanned]     = useState(null)
   const [loanerInput, setLoanerInput] = useState('')
 
-  const { vehicle, loading, error, lookup, lookupByLoaner, reset } = useVehicleLookup()
+  const { loading, error, lookup, lookupByLoaner, reset } = useVehicleLookup()
 
-  // ── Called by any scanner when a VIN is detected ───────────────────────
+  // Navigate directly to camera - no confirm, no type selection
+  function openCamera(vehicle) {
+    navigate(`/inspect/checkout/${vehicle.id}`, { state: { vehicle } })
+  }
+
+  // Called by any VIN scanner when a VIN is detected
   const handleVINDetected = useCallback(async (vin) => {
     setScanned(vin)
-    await lookup(vin)
-  }, [lookup])
+    const vehicle = await lookup(vin)
+    if (vehicle) openCamera(vehicle)
+  }, [lookup]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Called when porter submits a loaner number ─────────────────────────
-  async function handleLoanerSubmit(e) {
+  // Called when porter submits a loaner number
+  async function lookupVehicleByLoanerNumber(e) {
     e.preventDefault()
     const val = loanerInput.trim()
     if (!val) return
     setScanned(val)
-    await lookupByLoaner(val)
+    const vehicle = await lookupByLoaner(val)
+    if (vehicle) openCamera(vehicle)
   }
 
-  // ── Porter taps "No, Rescan" ───────────────────────────────────────────
-  function handleReject() {
+  // Reset on tab change
+  function handleTabChange(id) {
+    setTab(id)
     setScanned(null)
     reset()
   }
 
-  // ── Porter taps "Yes, Continue" ────────────────────────────────────────
-  function handleConfirm(v) {
-    navigate('/select-type', { state: { vehicle: v } })
-  }
-
-  // ── Loading state while API call runs ─────────────────────────────────
   if (loading) return <LoadingScreen message={`Looking up ${scanned}…`} />
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
       <PageHeader
-        title="Scan VIN"
-        subtitle="Point camera at barcode, scan text, or type it in"
+        title="New Inspection"
+        subtitle="Identify vehicle to begin"
         showBack
       />
 
       <main className="flex-1 flex flex-col px-5 pb-10 gap-5">
 
-        {/* ── Confirm card (shown after successful lookup) ─────────────── */}
-        {vehicle && !loading && (
-          <VehicleConfirmCard
-            vehicle={vehicle}
-            onConfirm={handleConfirm}
-            onReject={handleReject}
-          />
-        )}
-
-        {/* ── Error banner (VIN not found in fleet) ───────────────────── */}
-        {error && !vehicle && (
+        {/* Error banner */}
+        {error && (
           <div className="bg-red-900/50 border border-red-700 rounded-2xl px-5 py-4">
             <p className="text-red-300 font-semibold text-sm">{error}</p>
             <button
-              onClick={handleReject}
+              onClick={() => { setScanned(null); reset() }}
               className="mt-3 text-red-400 underline text-sm"
             >
-              Try a different VIN
+              Try again
             </button>
           </div>
         )}
 
-        {/* ── Scan interface (hidden once vehicle confirmed) ───────────── */}
-        {!vehicle && (
+        {/* Main tabs: VIN Scan | Loaner Number */}
+        <div className="flex bg-brand-mid rounded-2xl p-1 border border-brand-accent">
+          {MAIN_TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => handleTabChange(id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl
+                           text-sm font-bold transition-colors
+                           ${tab === id
+                             ? 'bg-brand-blue text-white shadow'
+                             : 'text-gray-400'}`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* VIN Scan tab */}
+        {tab === 'vin' && (
           <>
-            {/* Method tabs */}
-            <div className="flex bg-brand-mid rounded-2xl p-1 border border-brand-accent">
-              {TABS.map(({ id, label, Icon }) => (
+            {/* VIN method sub-tabs */}
+            <div className="flex gap-2">
+              {VIN_METHODS.map(({ id, label, Icon }) => (
                 <button
                   key={id}
-                  onClick={() => { setTab(id); setScanned(null); reset() }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl
-                               text-sm font-bold transition-colors
-                               ${tab === id
-                                 ? 'bg-brand-blue text-white shadow'
-                                 : 'text-gray-400'}`}
+                  onClick={() => { setVinMethod(id); setScanned(null); reset() }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
+                               text-xs font-bold transition-colors border
+                               ${vinMethod === id
+                                 ? 'bg-brand-blue/20 border-brand-blue text-brand-blue'
+                                 : 'border-brand-accent text-gray-500'}`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-3.5 h-3.5" />
                   {label}
                 </button>
               ))}
             </div>
 
-            {/* ── Barcode tab ─────────────────────────────────────────── */}
-            {tab === 'barcode' && (
+            {vinMethod === 'barcode' && (
               <div className="flex flex-col gap-3">
                 <p className="text-gray-400 text-sm text-center">
                   Point rear camera at the VIN barcode on the windshield or door jamb
                 </p>
                 <BarcodeScanner
                   onDetected={handleVINDetected}
-                  active={tab === 'barcode' && !vehicle}
+                  active={tab === 'vin' && vinMethod === 'barcode'}
                 />
               </div>
             )}
 
-            {/* ── OCR tab ─────────────────────────────────────────────── */}
-            {tab === 'ocr' && (
+            {vinMethod === 'ocr' && (
               <div className="flex flex-col gap-3">
                 <p className="text-gray-400 text-sm text-center">
                   Point at the VIN number on the dashboard or door sticker, then tap Scan
                 </p>
                 <OCRScanner
                   onDetected={handleVINDetected}
-                  active={tab === 'ocr' && !vehicle}
+                  active={tab === 'vin' && vinMethod === 'ocr'}
                 />
               </div>
             )}
 
-            {/* ── Manual tab ──────────────────────────────────────────── */}
-            {tab === 'manual' && (
-              <div className="flex flex-col gap-3">
-                <ManualVINEntry onDetected={handleVINDetected} />
-              </div>
-            )}
-
-            {/* ── Loaner number tab ────────────────────────────────────── */}
-            {tab === 'loaner' && (
-              <div className="flex flex-col gap-3">
-                <p className="text-gray-400 text-sm text-center">
-                  Enter the loaner number printed on the key tag or dashboard sticker
-                </p>
-                <form onSubmit={handleLoanerSubmit} className="flex flex-col gap-3">
-                  <input
-                    type="text"
-                    value={loanerInput}
-                    onChange={(e) => setLoanerInput(e.target.value)}
-                    placeholder="e.g. L-01"
-                    className="w-full bg-brand-mid border border-brand-accent rounded-2xl
-                               px-4 py-4 text-brand-white text-lg font-bold text-center
-                               placeholder:text-gray-600 focus:outline-none focus:border-brand-blue"
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    disabled={!loanerInput.trim()}
-                    className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Hash className="w-5 h-5" />
-                    Look Up Loaner
-                  </button>
-                </form>
-              </div>
+            {vinMethod === 'manual' && (
+              <ManualVINEntry onDetected={handleVINDetected} />
             )}
           </>
         )}
+
+        {/* Loaner Number tab */}
+        {tab === 'loaner' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-gray-400 text-sm text-center">
+              Enter the loaner number printed on the key tag or dashboard sticker
+            </p>
+            <form onSubmit={lookupVehicleByLoanerNumber} className="flex flex-col gap-3">
+              <input
+                type="text"
+                value={loanerInput}
+                onChange={(e) => setLoanerInput(e.target.value)}
+                placeholder="Enter Loaner #"
+                className="w-full bg-brand-mid border border-brand-accent rounded-2xl
+                           px-4 py-4 text-brand-white text-lg font-bold text-center
+                           placeholder:text-gray-600 focus:outline-none focus:border-brand-blue"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={!loanerInput.trim()}
+                className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Hash className="w-5 h-5" />
+                Look Up Loaner
+              </button>
+            </form>
+          </div>
+        )}
+
       </main>
     </div>
   )
