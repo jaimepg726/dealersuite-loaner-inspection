@@ -1,19 +1,19 @@
 """
-DealerSuite â Manager Dashboard Routes
+DealerSuite Ã¢ÂÂ Manager Dashboard Routes
 
-GET  /api/manager/stats                  â dashboard KPI summary
-GET  /api/manager/inspections            â paginated inspection list
-GET  /api/manager/inspections/{id}       â single inspection detail
-GET  /api/manager/damage                 â damage review queue
-PATCH /api/manager/damage/{id}           â assign RO / update status
-GET  /api/manager/reports                â aggregate report data
+GET  /api/manager/stats                  Ã¢ÂÂ dashboard KPI summary
+GET  /api/manager/inspections            Ã¢ÂÂ paginated inspection list
+GET  /api/manager/inspections/{id}       Ã¢ÂÂ single inspection detail
+GET  /api/manager/damage                 Ã¢ÂÂ damage review queue
+PATCH /api/manager/damage/{id}           Ã¢ÂÂ assign RO / update status
+GET  /api/manager/reports                Ã¢ÂÂ aggregate report data
 
-ââ Stage 10: User Management & Settings ââââââââââââââââââââââââââââââââââââââ
-GET    /api/manager/users                â list all users
-POST   /api/manager/users                â create a new porter / manager
-PATCH  /api/manager/users/{id}           â update user (name, role, active, password)
-DELETE /api/manager/users/{id}           â soft-deactivate a user
-GET    /api/manager/drive-status         â Google Drive connection health check
+Ã¢ÂÂÃ¢ÂÂ Stage 10: User Management & Settings Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+GET    /api/manager/users                Ã¢ÂÂ list all users
+POST   /api/manager/users                Ã¢ÂÂ create a new porter / manager
+PATCH  /api/manager/users/{id}           Ã¢ÂÂ update user (name, role, active, password)
+DELETE /api/manager/users/{id}           Ã¢ÂÂ soft-deactivate a user
+GET    /api/manager/drive-status         Ã¢ÂÂ Google Drive connection health check
 """
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -134,7 +134,7 @@ async def route_reports(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 â User Management (admin & manager access)
+# Stage 10 Ã¢ÂÂ User Management (admin & manager access)
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -299,7 +299,7 @@ async def route_deactivate_user(
 
 
 # ---------------------------------------------------------------------------
-# Stage 10 â Google Drive status
+# Stage 10 Ã¢ÂÂ Google Drive status
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -311,7 +311,7 @@ async def route_drive_status(
 ):
     """
     Returns whether Google Drive is configured and can authenticate.
-    Does not make a live API call â just checks whether credentials exist.
+    Does not make a live API call Ã¢ÂÂ just checks whether credentials exist.
     """
     from config import get_settings
     settings = get_settings()
@@ -336,7 +336,7 @@ async def route_drive_status(
 async def get_frame_match(
     inspection_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_manager),
 ):
     """
     Compare checkout vs checkin media for a vehicle to surface new damage.
