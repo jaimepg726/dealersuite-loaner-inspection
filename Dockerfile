@@ -1,18 +1,18 @@
-# ── DealerSuite Loaner Inspection — Multi-stage Dockerfile ──────────────────
+# ââ DealerSuite Loaner Inspection â Multi-stage Dockerfile ââââââââââââââââââ
 #
-# Stage 1 (frontend-build): Node 20 → builds the React / Vite SPA
-# Stage 2 (runtime):        Python 3.11 slim → runs FastAPI + serves the SPA
+# Stage 1 (frontend-build): Node 20 â builds the React / Vite SPA
+# Stage 2 (runtime):        Python 3.11 slim â runs FastAPI + serves the SPA
 #
 # Railway injects the PORT environment variable at runtime.
 
-# ── Stage 1: Build React frontend ───────────────────────────────────────────
+# ââ Stage 1: Build React frontend âââââââââââââââââââââââââââââââââââââââââââ
 FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
 
 # Install deps first (layer-cached unless package.json changes)
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install
+RUN cd frontend && npm ci
 
 # Copy source (invalidates layer on ANY frontend change, triggering rebuild)
 COPY frontend/ ./frontend/
@@ -22,7 +22,7 @@ RUN cd frontend && npm run build
 # Produces /app/frontend/dist/
 
 
-# ── Stage 2: Python runtime ──────────────────────────────────────────────────
+# ââ Stage 2: Python runtime ââââââââââââââââââââââââââââââââââââââââââââââââââ
 FROM python:3.11-slim
 
 WORKDIR /app/backend
@@ -37,7 +37,7 @@ COPY backend/ ./
 # Copy built frontend dist into the location FastAPI expects
 COPY --from=frontend-build /app/frontend/dist ./frontend_dist
 
-# Ensure Python output (stdout/stderr) is never buffered — all logs are visible in Railway
+# Ensure Python output (stdout/stderr) is never buffered â all logs are visible in Railway
 ENV PYTHONUNBUFFERED=1
 
 # Tell Railway/Docker which port this service listens on.
