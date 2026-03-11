@@ -134,10 +134,21 @@ async def google_callback(
         )
     email = info_resp.json().get("email", "unknown") if info_resp.status_code == 200 else "unknown"
 
-    # Store tokens encrypted
+    # Store tokens encrypted.
+    # Google only sends refresh_token on the very first consent grant; subsequent
+    # re-authorisations omit it.  Keep the existing one if no new one arrives.
     await set_setting(db, KEY_GOOGLE_ACCESS_TOKEN, access_token)
+    existing_refresh = await get_setting(db, KEY_GOOGLE_REFRESH_TOKEN)
     if refresh_token:
         await set_setting(db, KEY_GOOGLE_REFRESH_TOKEN, refresh_token)
+    elif not existing_refresh:
+        # No refresh token in DB and Google didn't send one — offline access is
+        # impossible.  Surface this as an error so the user knows to reconnect.
+        from config import get_settings as _gs
+        _frontend = _gs().frontend_url
+        return RedirectResponse(
+            url=f"{_frontend}/dashboard/settings?drive=error&reason=no_refresh_token"
+        )
     await set_setting(db, KEY_GOOGLE_TOKEN_EXPIRY, expiry.isoformat())
     await set_setting(db, KEY_GOOGLE_ACCOUNT_EMAIL, email)
 
@@ -148,7 +159,7 @@ async def google_callback(
 
     await db.commit()
 
-    logger.info("Drive OAuth connected: account=%s", email)
+    logger.info("Drive OAuth callback: email=%s new_refresh=%s", email, bool(refresh_token))
 
     # Redirect to settings page
     from config import get_settings
