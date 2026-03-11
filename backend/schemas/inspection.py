@@ -31,12 +31,26 @@ class MediaItem(BaseModel):
         from_attributes = True
 
 
+class VehicleBrief(BaseModel):
+    """Minimal vehicle fields embedded in inspection list/detail responses."""
+    id:            int
+    loaner_number: Optional[str] = None
+    year:          Optional[int] = None
+    make:          Optional[str] = None
+    model:         Optional[str] = None
+    vin:           str
+
+    class Config:
+        from_attributes = True
+
+
 class InspectionResponse(BaseModel):
     id:               int
     vehicle_id:       int
     inspection_type:  str
     status:           str
     inspector_name:   Optional[str]  = None
+    drive_folder_id:  Optional[str]  = None
     drive_folder_url: Optional[str]  = None
     video_url:        Optional[str]  = None
     photo_count:      int
@@ -55,16 +69,17 @@ class InspectionResponse(BaseModel):
 
 
 class InspectionSummary(BaseModel):
-    """Lightweight version for list views — no nested damages."""
+    """Lightweight version for list views — includes vehicle for card display."""
     id:               int
     vehicle_id:       int
     inspection_type:  str
     status:           str
-    inspector_name:   Optional[str] = None
+    inspector_name:   Optional[str]    = None
     photo_count:      int
-    drive_folder_url: Optional[str] = None
+    drive_folder_url: Optional[str]    = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
+    vehicle:          Optional[VehicleBrief] = None
 
     class Config:
         from_attributes = True
