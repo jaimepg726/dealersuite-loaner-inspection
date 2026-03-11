@@ -57,8 +57,12 @@ def build_filename(
 class GoogleDriveBackend(StorageBackend):
     """
     Uses OAuth tokens stored in the database settings table.
-    Requires the database session to be injected at construction.
+    Uses httpx for all Google Drive API calls to avoid google-auth
+    internal datetime comparison issues.
     """
+
+    DRIVE_API = "https://www.googleapis.com/drive/v3"
+    DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
 
     def __init__(self, db_session):
         self._db = db_session
@@ -67,17 +71,8 @@ class GoogleDriveBackend(StorageBackend):
     def backend_name(self) -> str:
         return "drive"
 
-    async def is_available(self) -> bool:
-        try:
-            creds = await self._get_credentials()
-            return creds is not None
-        except Exception:
-            return False
-
-    async def _get_credentials(self):
-        """Build google.oauth2.credentials.Credentials from stored tokens.
-        Supports access-token-only mode (no refresh_token) when token is still valid.
-        """
+    async def _get_access_token(self) -> str | None:
+        """Get a valid access token, refreshing if needed. Returns None if unavailable."""
         try:
             from services.settings_service import (
                 get_setting, set_setting,
@@ -93,7 +88,6 @@ class GoogleDriveBackend(StorageBackend):
             if not access_token:
                 return None
 
-            # Parse expiry — always UTC-aware
             expiry = None
             if expiry_str:
                 try:
@@ -104,69 +98,66 @@ class GoogleDriveBackend(StorageBackend):
                     pass
 
             now = datetime.now(timezone.utc)
+            near_expiry = expiry is not None and (expiry - now) < timedelta(minutes=5)
             token_expired = expiry is not None and expiry <= now
 
             if token_expired and not refresh_token:
-                logger.warning("Drive: token expired and no refresh_token — reconnect required")
+                logger.warning("Drive: token expired and no refresh_token")
                 return None
 
-            from google.oauth2.credentials import Credentials
-            from google.auth.transport.requests import Request as GoogleRequest
-
-            # When no refresh_token: pass expiry=None so google-auth never tries
-            # an internal datetime comparison that crashes with offset-naive errors
-            creds = Credentials(
-                token=access_token,
-                refresh_token=refresh_token,
-                token_uri="https://oauth2.googleapis.com/token",
-                client_id=cfg.google_client_id,
-                client_secret=cfg.google_client_secret,
-                expiry=expiry if refresh_token else None,
-            )
-
-            # Only refresh when we have a refresh_token and it's needed
-            near_expiry = expiry is not None and (expiry - now) < timedelta(minutes=5)
+            # Refresh using httpx if needed
             if refresh_token and (token_expired or near_expiry):
-                try:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, lambda: creds.refresh(GoogleRequest()))
-                    await set_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN, creds.token)
-                    if creds.refresh_token:
-                        await set_setting(self._db, KEY_GOOGLE_REFRESH_TOKEN, creds.refresh_token)
-                    if creds.expiry:
-                        new_exp = creds.expiry
-                        if new_exp.tzinfo is None:
-                            new_exp = new_exp.replace(tzinfo=timezone.utc)
-                        await set_setting(self._db, KEY_GOOGLE_TOKEN_EXPIRY, new_exp.isoformat())
+                import httpx as _httpx
+                async with _httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        "https://oauth2.googleapis.com/token",
+                        data={
+                            "client_id": cfg.google_client_id,
+                            "client_secret": cfg.google_client_secret,
+                            "refresh_token": refresh_token,
+                            "grant_type": "refresh_token",
+                        },
+                    )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    access_token = data["access_token"]
+                    new_expiry = now + timedelta(seconds=data.get("expires_in", 3600))
+                    await set_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN, access_token)
+                    await set_setting(self._db, KEY_GOOGLE_TOKEN_EXPIRY, new_expiry.isoformat())
+                    if data.get("refresh_token"):
+                        await set_setting(self._db, KEY_GOOGLE_REFRESH_TOKEN, data["refresh_token"])
                     await self._db.commit()
-                    logger.info("Drive: access token refreshed successfully")
-                except Exception as exc:
-                    logger.error("Drive: token refresh failed - %s", exc)
+                    logger.info("Drive: token refreshed via httpx")
+                else:
+                    logger.error("Drive: token refresh failed: %s", resp.text)
                     return None
 
-            return creds
+            return access_token
         except Exception as exc:
-            logger.error("Drive: _get_credentials unexpected error - %s", exc)
+            logger.error("Drive: _get_access_token error - %s", exc)
             return None
 
-    def _build_service(self, creds):
-        from googleapiclient.discovery import build
-        return build("drive", "v3", credentials=creds, cache_discovery=False)
+    # Keep _get_credentials for backward compatibility with google_test endpoint
+    async def _get_credentials(self):
+        """Returns a minimal object with .token attribute for compatibility."""
+        token = await self._get_access_token()
+        if not token:
+            return None
+        class _FakeCreds:
+            def __init__(self, t): self.token = t
+        return _FakeCreds(token)
+
+    async def is_available(self) -> bool:
+        return (await self._get_access_token()) is not None
 
     async def _ensure_folders(self) -> dict:
-        """
-        Return folder IDs from settings. Create them once if missing.
-        Returns dict with keys: root, inspections, damage
-        """
+        """Get or create Drive folder hierarchy using httpx."""
         from services.settings_service import (
-            get_setting,
-            set_setting,
-            KEY_DRIVE_ROOT_FOLDER_ID,
-            KEY_DRIVE_INSP_FOLDER_ID,
-            KEY_DRIVE_DMG_FOLDER_ID,
-            KEY_DRIVE_FOLDER_NAME,
-            KEY_GOOGLE_ACCOUNT_EMAIL,
+            get_setting, set_setting,
+            KEY_DRIVE_ROOT_FOLDER_ID, KEY_DRIVE_INSP_FOLDER_ID,
+            KEY_DRIVE_DMG_FOLDER_ID, KEY_DRIVE_FOLDER_NAME,
         )
+        import httpx
 
         root_id = await get_setting(self._db, KEY_DRIVE_ROOT_FOLDER_ID)
         insp_id = await get_setting(self._db, KEY_DRIVE_INSP_FOLDER_ID)
@@ -175,65 +166,55 @@ class GoogleDriveBackend(StorageBackend):
         if root_id and insp_id and dmg_id:
             return {"root": root_id, "inspections": insp_id, "damage": dmg_id}
 
-        # Need to create folders
-        creds = await self._get_credentials()
-        if not creds:
+        token = await self._get_access_token()
+        if not token:
             raise RuntimeError("No valid Drive credentials")
 
-        loop = asyncio.get_event_loop()
-        service = await loop.run_in_executor(None, lambda: self._build_service(creds))
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-        def _create_folders():
-            def find_or_create(name, parent_id=None):
-                q_parts = [
-                    "mimeType = 'application/vnd.google-apps.folder'",
-                    f"name = '{name}'",
-                    "trashed = false",
-                ]
-                if parent_id:
-                    q_parts.append(f"'{parent_id}' in parents")
-                resp = service.files().list(
-                    q=" and ".join(q_parts),
-                    spaces="drive",
-                    fields="files(id)",
-                    pageSize=1,
-                ).execute()
-                files = resp.get("files", [])
-                if files:
-                    return files[0]["id"]
-                meta = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
-                if parent_id:
-                    meta["parents"] = [parent_id]
-                folder = service.files().create(body=meta, fields="id").execute()
-                fid = folder["id"]
-                logger.info("Drive: created folder '%s' -> %s", name, fid)
-                return fid
+        async def find_or_create(name, parent_id=None):
+            q = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and trashed=false"
+            if parent_id:
+                q += f" and '{parent_id}' in parents"
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{self.DRIVE_API}/files",
+                    params={"q": q, "fields": "files(id)", "pageSize": 1},
+                    headers=headers,
+                )
+            files = r.json().get("files", [])
+            if files:
+                return files[0]["id"]
+            body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+            if parent_id:
+                body["parents"] = [parent_id]
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{self.DRIVE_API}/files",
+                    json=body,
+                    params={"fields": "id"},
+                    headers=headers,
+                )
+            fid = r.json()["id"]
+            logger.info("Drive: created folder '%s' -> %s", name, fid)
+            return fid
 
-            r_id = find_or_create(ROOT_FOLDER)
-            i_id = find_or_create("inspections", r_id)
-            d_id = find_or_create("damage", r_id)
-            return r_id, i_id, d_id
+        root_id = await find_or_create(ROOT_FOLDER)
+        insp_id = await find_or_create("inspections", root_id)
+        dmg_id = await find_or_create("damage", root_id)
 
-        root_id, insp_id, dmg_id = await loop.run_in_executor(None, _create_folders)
-
-        # Persist folder IDs
         await set_setting(self._db, KEY_DRIVE_ROOT_FOLDER_ID, root_id)
         await set_setting(self._db, KEY_DRIVE_INSP_FOLDER_ID, insp_id)
         await set_setting(self._db, KEY_DRIVE_DMG_FOLDER_ID, dmg_id)
         await set_setting(self._db, KEY_DRIVE_FOLDER_NAME, ROOT_FOLDER)
-
-        try:
-            email = await get_setting(self._db, KEY_GOOGLE_ACCOUNT_EMAIL)
-            logger.info(
-                "Drive CONNECTED: account=%s root_folder_id=%s",
-                email,
-                root_id,
-            )
-        except Exception:
-            pass
-
         await self._db.commit()
+        logger.info("Drive: folders ready — root=%s insp=%s dmg=%s", root_id, insp_id, dmg_id)
+
         return {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+
+    def _build_service(self, creds):
+        from googleapiclient.discovery import build
+        return build("drive", "v3", credentials=creds, cache_discovery=False)
 
     async def upload_file(
         self,
@@ -242,70 +223,69 @@ class GoogleDriveBackend(StorageBackend):
         mimetype: str,
         folder_hint: str = "inspections",
     ) -> UploadResult:
+        import httpx
         try:
             folders = await self._ensure_folders()
             folder_id = folders.get(folder_hint, folders["inspections"])
-            creds = await self._get_credentials()
-            if not creds:
+            token = await self._get_access_token()
+            if not token:
                 raise RuntimeError("No valid Drive credentials")
 
-            loop = asyncio.get_event_loop()
-            service = await loop.run_in_executor(None, lambda: self._build_service(creds))
+            headers_auth = {"Authorization": f"Bearer {token}"}
 
-            def _upload():
-                from googleapiclient.http import MediaIoBaseUpload
-                meta = {"name": filename, "parents": [folder_id]}
-                media = MediaIoBaseUpload(
-                    io.BytesIO(content), mimetype=mimetype, resumable=True
+            async def _do_upload():
+                # Multipart upload
+                import json as _json
+                boundary = f"boundary_{secrets.token_hex(8)}"
+                meta = _json.dumps({"name": filename, "parents": [folder_id]}).encode()
+                body = (
+                    f"--{boundary}\r\n".encode() +
+                    b"Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+                    meta + b"\r\n" +
+                    f"--{boundary}\r\n".encode() +
+                    f"Content-Type: {mimetype}\r\n\r\n".encode() +
+                    content + b"\r\n" +
+                    f"--{boundary}--".encode()
                 )
-                f = service.files().create(
-                    body=meta, media_body=media, fields="id"
-                ).execute()
-                fid = f["id"]
-                service.permissions().create(
-                    fileId=fid,
-                    body={"role": "reader", "type": "anyone"},
-                ).execute()
+                async with httpx.AsyncClient(timeout=UPLOAD_TIMEOUT) as client:
+                    r = await client.post(
+                        f"{self.DRIVE_UPLOAD_API}/files",
+                        params={"uploadType": "multipart", "fields": "id"},
+                        content=body,
+                        headers={
+                            **headers_auth,
+                            "Content-Type": f"multipart/related; boundary={boundary}",
+                        },
+                    )
+                if r.status_code not in (200, 201):
+                    raise RuntimeError(f"Upload failed {r.status_code}: {r.text[:200]}")
+                fid = r.json()["id"]
+                # Make public
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        f"{self.DRIVE_API}/files/{fid}/permissions",
+                        json={"role": "reader", "type": "anyone"},
+                        headers=headers_auth,
+                    )
                 return fid
 
-            # 30-second timeout, one retry
             for attempt in range(2):
                 try:
-                    file_id = await asyncio.wait_for(
-                        loop.run_in_executor(None, _upload),
-                        timeout=UPLOAD_TIMEOUT,
-                    )
+                    file_id = await _do_upload()
                     file_url = DRIVE_FILE_BASE.format(file_id)
                     logger.info("Drive: uploaded '%s' -> %s", filename, file_id)
                     return UploadResult(
-                        file_id=file_id,
-                        file_url=file_url,
-                        backend="drive",
-                        filename=filename,
-                        success=True,
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "Drive: upload timeout attempt %d for %s",
-                        attempt + 1,
-                        filename,
+                        file_id=file_id, file_url=file_url, backend="drive",
+                        filename=filename, success=True,
                     )
                 except Exception as exc:
-                    logger.warning(
-                        "Drive: upload error attempt %d - %s", attempt + 1, exc
-                    )
+                    logger.warning("Drive: upload attempt %d failed - %s", attempt + 1, exc)
                     if attempt == 0:
                         await asyncio.sleep(1)
 
             raise RuntimeError("Drive upload failed after 2 attempts")
 
         except Exception as exc:
-            logger.error(
-                "Drive: upload failed for '%s' - %s; falling back to local",
-                filename,
-                exc,
-            )
+            logger.error("Drive: upload failed for '%s' - %s; falling back to local", filename, exc)
             from storage.local_backend import LocalStorageBackend
-            return await LocalStorageBackend().upload_file(
-                content, filename, mimetype, folder_hint
-            )
+            return await LocalStorageBackend().upload_file(content, filename, mimetype, folder_hint)
