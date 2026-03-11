@@ -1,15 +1,15 @@
 /**
- * DealerSuite — Inspection Page
+ * DealerSuite â Inspection Page
  *
  * Full inspection flow orchestrator.
  *
  * Phases:
- *   init       → API start + Drive folder creation (from Stage 8)
- *   recording  → VideoRecorder walkround
- *   damage     → DamageLogger
- *   uploading  → UploadProgress (video → photos → damage records → complete)
- *   done       → Success screen with Drive folder link
- *   error      → Fatal error (API down, no vehicle, etc.)
+ *   init       â API start + Drive folder creation (from Stage 8)
+ *   recording  â VideoRecorder walkround
+ *   damage     â DamageLogger
+ *   uploading  â UploadProgress (video â photos â damage records â complete)
+ *   done       â Success screen with Drive folder link
+ *   error      â Fatal error (API down, no vehicle, etc.)
  */
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
@@ -19,7 +19,6 @@ import {
   AlertCircle,
   ExternalLink,
   Home,
-  Video,
 } from 'lucide-react'
 import api            from '../utils/api'
 import PageHeader     from '../components/ui/PageHeader'
@@ -28,7 +27,7 @@ import VideoRecorder  from '../components/inspection/VideoRecorder'
 import DamageLogger   from '../components/inspection/DamageLogger'
 import UploadProgress from '../components/inspection/UploadProgress'
 
-// ── Type config ───────────────────────────────────────────────────────────────
+// ââ Type config âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const TYPE_LABELS = {
   checkout:  { label: 'Checkout Inspection',  color: 'text-brand-blue'  },
   checkin:   { label: 'Check-In Inspection',  color: 'text-brand-green' },
@@ -43,7 +42,7 @@ const TYPE_API_MAP = {
   sales:     'Sales',
 }
 
-// ── Upload step builder ───────────────────────────────────────────────────────
+// ââ Upload step builder âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function makeSteps(hasVideo, photoCount) {
   const steps = []
   if (hasVideo)   steps.push({ label: 'Uploading walkround video', status: 'pending' })
@@ -53,7 +52,7 @@ function makeSteps(hasVideo, photoCount) {
   return steps
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ââ Main component ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function InspectPage() {
   const { type, vehicleId } = useParams()
   const location            = useLocation()
@@ -65,18 +64,17 @@ export default function InspectPage() {
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
   const apiType  = TYPE_API_MAP[type] || 'Checkout'
 
-  const [phase,         setPhase]         = useState('init')
-  const [uploadSteps,   setUploadSteps]   = useState([])
-  const [uploadPct,     setUploadPct]     = useState(0)
-  const [uploadError,   setUploadError]   = useState(null)
-  const [mediaUploaded, setMediaUploaded] = useState(false)
+  const [phase,       setPhase]       = useState('init')
+  const [uploadSteps, setUploadSteps] = useState([])
+  const [uploadPct,   setUploadPct]   = useState(0)
+  const [uploadError, setUploadError] = useState(null)
 
-  // Media captured during recording — held in refs to avoid stale closures
+  // Media captured during recording â held in refs to avoid stale closures
   const videoBlobRef  = useRef(null)
   const photoBlobsRef = useRef([])  // still frames taken during walkround
   const damagesRef    = useRef([])  // DamageLogger output
 
-  // ── Start inspection on mount ─────────────────────────────────────────────
+  // ââ Start inspection on mount âââââââââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!vehicleId) return
     start(Number(vehicleId), apiType)
@@ -85,7 +83,7 @@ export default function InspectPage() {
     return () => reset()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Transitions ───────────────────────────────────────────────────────────
+  // ââ Transitions âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   function handleVideoComplete(videoBlob, capturedPhotos) {
     videoBlobRef.current  = videoBlob
@@ -103,7 +101,7 @@ export default function InspectPage() {
     kickOffUploads([])
   }
 
-  // ── Upload orchestration ──────────────────────────────────────────────────
+  // ââ Upload orchestration ââââââââââââââââââââââââââââââââââââââââââââââââââ
   async function kickOffUploads(damages) {
     const videoBlob   = videoBlobRef.current
     const photoDmg    = damages.filter(d => d.photoBlob)
@@ -120,20 +118,20 @@ export default function InspectPage() {
       setUploadSteps(prev => prev.map((s, i) => i === si ? { ...s, status } : s))
 
     try {
-      // Step 1 — video upload (non-fatal if Drive not configured)
+      // Step 1 â video upload (non-fatal if Drive not configured)
       if (videoBlob) {
         mark('active')
         try {
           await uploadFile(videoBlob, 'video')
         } catch {
-          console.warn('Video upload skipped — Drive may not be configured')
+          console.warn('Video upload skipped â Drive may not be configured')
         }
         mark('done')
         si++
         setUploadPct(0)
       }
 
-      // Step 2 — damage photo uploads
+      // Step 2 â damage photo uploads
       const photoResults = []
       if (photoCount > 0) {
         mark('active')
@@ -162,7 +160,7 @@ export default function InspectPage() {
         setUploadPct(0)
       }
 
-      // Step 3 — save damage records
+      // Step 3 â save damage records
       mark('active')
       if (!inspection) throw new Error('Inspection not found')
 
@@ -188,13 +186,12 @@ export default function InspectPage() {
       mark('done')
       si++
 
-      // Step 4 — complete inspection
+      // Step 4 â complete inspection
       mark('active')
       const totalPhotos = photoResults.length
       await complete(totalPhotos)
       mark('done')
 
-      setMediaUploaded(true)
       setPhase('done')
 
     } catch (err) {
@@ -205,19 +202,19 @@ export default function InspectPage() {
     }
   }
 
-  // ── Render: starting / init ───────────────────────────────────────────────
+  // ââ Render: starting / init âââââââââââââââââââââââââââââââââââââââââââââââ
   if (phase === 'init' || starting) {
     return (
       <FullScreenShell title={typeInfo.label} showBack>
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <Loader className="w-12 h-12 text-brand-blue animate-spin" />
-          <p className="text-gray-400 font-semibold">Starting inspection…</p>
+          <p className="text-gray-400 font-semibold">Starting inspectionâ¦</p>
         </div>
       </FullScreenShell>
     )
   }
 
-  // ── Render: fatal error ───────────────────────────────────────────────────
+  // ââ Render: fatal error âââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (phase === 'error' || (!starting && error)) {
     return (
       <FullScreenShell title={typeInfo.label} showBack>
@@ -225,17 +222,17 @@ export default function InspectPage() {
           <AlertCircle className="w-12 h-12 text-red-400" />
           <p className="text-red-400 font-bold text-lg">Could Not Start</p>
           <p className="text-gray-500 text-sm">
-            {error || 'Unknown error — go back and try again'}
+            {error || 'Unknown error â go back and try again'}
           </p>
           <button onClick={() => navigate(-1)} className="btn-ghost w-auto px-8 mt-2">
-            ← Go Back
+            â Go Back
           </button>
         </div>
       </FullScreenShell>
     )
   }
 
-  // ── Render: done ──────────────────────────────────────────────────────────
+  // ââ Render: done ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (phase === 'done') {
     return (
       <FullScreenShell title="Inspection Complete">
@@ -252,20 +249,18 @@ export default function InspectPage() {
             </p>
           </div>
 
-          {/* Upload confirmation banners */}
-          <div className="flex flex-col gap-2 w-full">
-            <div className="flex items-center gap-2 bg-green-900/30 border border-green-700
-                            rounded-xl px-4 py-2.5 text-green-400 font-semibold text-sm">
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              Inspection Saved
+          {/* Confirmation banners */}
+          <div className="flex flex-col gap-2 w-full max-w-xs">
+            <div className="flex items-center gap-3 bg-green-900/40 border border-green-700
+                            rounded-xl px-4 py-2.5">
+              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+              <span className="text-green-300 text-sm font-semibold">Inspection Saved</span>
             </div>
-            {mediaUploaded && (
-              <div className="flex items-center gap-2 bg-green-900/30 border border-green-700
-                              rounded-xl px-4 py-2.5 text-green-400 font-semibold text-sm">
-                <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                Media Uploaded
-              </div>
-            )}
+            <div className="flex items-center gap-3 bg-green-900/40 border border-green-700
+                            rounded-xl px-4 py-2.5">
+              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+              <span className="text-green-300 text-sm font-semibold">Media Uploaded</span>
+            </div>
           </div>
 
           {inspection?.drive_folder_url && (
@@ -284,7 +279,7 @@ export default function InspectPage() {
 
           {damagesRef.current.length > 0 && (
             <p className="text-yellow-400 text-sm font-semibold">
-              ⚠ {damagesRef.current.length} damage
+              â  {damagesRef.current.length} damage
               item{damagesRef.current.length !== 1 ? 's' : ''} logged
             </p>
           )}
@@ -298,7 +293,7 @@ export default function InspectPage() {
     )
   }
 
-  // ── Render: recording / damage / uploading ────────────────────────────────
+  // ââ Render: recording / damage / uploading ââââââââââââââââââââââââââââââââ
   const subtitle = vehicle
     ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim()
     : `Vehicle #${vehicleId}`
@@ -306,7 +301,7 @@ export default function InspectPage() {
   const phaseTitle = {
     recording: typeInfo.label,
     damage:    'Log Damage',
-    uploading: 'Saving…',
+    uploading: 'Savingâ¦',
   }[phase] || typeInfo.label
 
   const ORDERED = ['recording', 'damage', 'uploading']
@@ -347,23 +342,11 @@ export default function InspectPage() {
         )}
 
         {phase === 'damage' && (
-          <>
-            {/* Persistent video button — always visible during damage phase */}
-            <button
-              onClick={() => setPhase('recording')}
-              className="flex items-center gap-2 self-start text-sm font-bold
-                         text-brand-blue bg-brand-blue/10 border border-brand-blue/30
-                         px-4 py-2 rounded-xl active:scale-95 transition-transform"
-            >
-              <Video className="w-4 h-4" />
-              {videoBlobRef.current ? 'Re-record Video' : 'Record Video'}
-            </button>
-            <DamageLogger
-              capturedPhotos={photoBlobsRef.current}
-              onComplete={handleDamageComplete}
-              onSkip={handleSkipDamage}
-            />
-          </>
+          <DamageLogger
+            capturedPhotos={photoBlobsRef.current}
+            onComplete={handleDamageComplete}
+            onSkip={handleSkipDamage}
+          />
         )}
 
         {phase === 'uploading' && (
@@ -379,7 +362,7 @@ export default function InspectPage() {
   )
 }
 
-// ── Shared shell ───────────────────────────────────────────────────────────────
+// ââ Shared shell âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function FullScreenShell({ title, showBack = false, children }) {
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
