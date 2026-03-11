@@ -142,7 +142,7 @@ async def google_callback(
     if refresh_token:
         await set_setting(db, KEY_GOOGLE_REFRESH_TOKEN, refresh_token)
     elif not existing_refresh:
-        # No refresh token in DB and Google didn't send one — offline access is
+        # No refresh token in DB and Google didn't send one â offline access is
         # impossible.  Surface this as an error so the user knows to reconnect.
         from config import get_settings as _gs
         _frontend = _gs().frontend_url
@@ -205,9 +205,11 @@ async def google_test(
     current_user=Depends(require_manager),
 ):
     from storage.drive_backend import GoogleDriveBackend
+    import httpx
+
     drive = GoogleDriveBackend(db)
 
-    # Test token refresh
+    # Test credentials build
     creds = await drive._get_credentials()
     if not creds:
         return {
@@ -217,23 +219,37 @@ async def google_test(
             "error": "No valid credentials - please reconnect Google Drive",
         }
 
-    # Test Drive API access with a simple about query
+    # Use httpx directly to test Drive API — avoids google-auth internal datetime bugs
     try:
-        import asyncio
-        from googleapiclient.discovery import build
-        service = build("drive", "v3", credentials=creds, cache_discovery=False)
-        loop = asyncio.get_event_loop()
-        about = await loop.run_in_executor(
-            None,
-            lambda: service.about().get(fields="user").execute()
-        )
-        drive_email = about.get("user", {}).get("emailAddress", "unknown")
-        return {
-            "healthy": True,
-            "token_refresh": True,
-            "drive_access": True,
-            "drive_account": drive_email,
-        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://www.googleapis.com/drive/v3/about",
+                params={"fields": "user"},
+                headers={"Authorization": f"Bearer {creds.token}"},
+                timeout=10,
+            )
+        if resp.status_code == 200:
+            drive_email = resp.json().get("user", {}).get("emailAddress", "unknown")
+            return {
+                "healthy": True,
+                "token_refresh": True,
+                "drive_access": True,
+                "drive_account": drive_email,
+            }
+        elif resp.status_code == 401:
+            return {
+                "healthy": False,
+                "token_refresh": True,
+                "drive_access": False,
+                "error": "Access token expired — please reconnect Google Drive to get a fresh token",
+            }
+        else:
+            return {
+                "healthy": False,
+                "token_refresh": True,
+                "drive_access": False,
+                "error": f"Drive API error {resp.status_code}",
+            }
     except Exception as exc:
         return {
             "healthy": False,
