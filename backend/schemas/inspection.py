@@ -22,10 +22,11 @@ class InspectionComplete(BaseModel):
 
 
 class MediaItem(BaseModel):
-    id:         int
-    file_url:   str
-    media_type: str  # "photo" | "video"
-    created_at: datetime
+    id:                 int
+    file_url:           str
+    media_type:         str             # "photo" | "video"
+    matching_frame_url: Optional[str]  = None
+    created_at:         datetime
 
     class Config:
         from_attributes = True

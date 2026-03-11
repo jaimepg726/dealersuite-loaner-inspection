@@ -23,6 +23,46 @@ function toDriveViewUrl(url) {
   return url
 }
 
+/**
+ * Side-by-side comparison: previous walkaround frame vs damage photo.
+ * Shown when a photo has a matching_frame_url set by the AI matching service.
+ */
+function FrameComparison({ frameUrl, photoUrl }) {
+  return (
+    <div className="rounded-xl border border-yellow-700/60 bg-yellow-950/20 overflow-hidden">
+      <p className="text-xs font-bold text-yellow-500 uppercase tracking-wider px-3 py-2 border-b border-yellow-700/40">
+        Previous Inspection Reference Frame
+      </p>
+      <div className="grid grid-cols-2 gap-0">
+        {/* Left — walkaround frame */}
+        <div className="flex flex-col">
+          <p className="text-xs font-semibold text-gray-400 px-2 py-1 bg-brand-mid text-center">
+            Previous Inspection Frame
+          </p>
+          <img
+            src={frameUrl}
+            alt="Previous inspection frame"
+            className="w-full aspect-square object-cover"
+            loading="lazy"
+          />
+        </div>
+        {/* Right — damage photo */}
+        <div className="flex flex-col border-l border-yellow-700/30">
+          <p className="text-xs font-semibold text-gray-400 px-2 py-1 bg-brand-mid text-center">
+            Damage Photo
+          </p>
+          <img
+            src={toDriveViewUrl(photoUrl)}
+            alt="Damage photo"
+            className="w-full aspect-square object-cover"
+            loading="lazy"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MediaGallery({ media }) {
   const [modalSrc, setModalSrc] = useState(null)
   const [modalType, setModalType] = useState(null)
@@ -41,6 +81,21 @@ function MediaGallery({ media }) {
 
   return (
     <>
+      {/* Frame comparison panels (Checkin damage photos with AI-matched frame) */}
+      {photos.some((m) => m.matching_frame_url) && (
+        <div className="mb-4 flex flex-col gap-3">
+          {photos
+            .filter((m) => m.matching_frame_url)
+            .map((m) => (
+              <FrameComparison
+                key={`cmp-${m.id}`}
+                frameUrl={m.matching_frame_url}
+                photoUrl={m.file_url}
+              />
+            ))}
+        </div>
+      )}
+
       {/* Photos */}
       {photos.length > 0 && (
         <div className="mb-4">

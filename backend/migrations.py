@@ -9,12 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 logger = logging.getLogger(__name__)
 
 _MIGRATIONS = [
-    ("inspections",     "is_demo",   "BOOLEAN DEFAULT false"),
-    ("loaners",         "is_demo",   "BOOLEAN DEFAULT false"),
-    ("vehicles",        "is_demo",   "BOOLEAN DEFAULT false"),
-    ("porters",         "is_demo",   "BOOLEAN DEFAULT false"),
-    ("inspection_media","file_data", "BYTEA"),
-    ("inspection_media","mime_type", "VARCHAR(50)"),
+    ("inspections",     "is_demo",           "BOOLEAN DEFAULT false"),
+    ("loaners",         "is_demo",           "BOOLEAN DEFAULT false"),
+    ("vehicles",        "is_demo",           "BOOLEAN DEFAULT false"),
+    ("porters",         "is_demo",           "BOOLEAN DEFAULT false"),
+    ("inspection_media","file_data",          "BYTEA"),
+    ("inspection_media","mime_type",          "VARCHAR(50)"),
+    ("inspection_media","matching_frame_url", "TEXT"),
 ]
 
 # DDL statements run once on startup (CREATE TABLE IF NOT EXISTS is idempotent)
@@ -25,6 +26,16 @@ _CREATE_TABLES = [
         inspection_id INTEGER REFERENCES inspections(id) ON DELETE CASCADE,
         file_url      TEXT NOT NULL,
         media_type    VARCHAR(10) NOT NULL,
+        created_at    TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS inspection_video_frames (
+        id            SERIAL PRIMARY KEY,
+        inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+        frame_url     TEXT NOT NULL,
+        frame_index   INTEGER NOT NULL,
+        frame_data    BYTEA,
         created_at    TIMESTAMPTZ DEFAULT now()
     )
     """,

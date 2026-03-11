@@ -213,6 +213,18 @@ async def upload_media(
     except Exception as exc:
         logger.warning("Drive upload skipped for media %d: %s", record.id, exc)
 
+    # 7. Trigger AI background tasks (never block the upload response).
+    #    • Checkout video  → extract frames for future matching
+    #    • Checkin photo   → find best frame from previous Checkout walkround
+    if media_type == "video" and inspection.inspection_type == "Checkout":
+        asyncio.create_task(
+            _extract_frames_bg(inspection_id, content)
+        )
+    elif media_type == "photo" and inspection.inspection_type == "Checkin":
+        asyncio.create_task(
+            _match_frame_bg(record.id, content, inspection.vehicle_id)
+        )
+
     return UploadResponse(
         file_id=str(record.id),
         file_url=record.file_url,
@@ -220,6 +232,122 @@ async def upload_media(
         bytes_uploaded=len(content),
         backend=final_backend,
     )
+
+
+# ---------------------------------------------------------------------------
+# Background task: extract frames from a walkaround video (Checkout)
+# ---------------------------------------------------------------------------
+
+async def _extract_frames_bg(inspection_id: int, video_bytes: bytes) -> None:
+    """Extract 1fps frames from video bytes and store them in inspection_video_frames."""
+    from database import AsyncSessionLocal
+    from models.inspection_video_frames import InspectionVideoFrame
+    from services.video_processing import extract_frames
+
+    try:
+        frame_bytes_list = await extract_frames(video_bytes, inspection_id)
+        if not frame_bytes_list:
+            return
+
+        async with AsyncSessionLocal() as bg_db:
+            for idx, fb in enumerate(frame_bytes_list):
+                frame = InspectionVideoFrame(
+                    inspection_id=inspection_id,
+                    frame_index=idx,
+                    frame_url="",   # set after flush
+                    frame_data=fb,
+                )
+                bg_db.add(frame)
+                await bg_db.flush()
+                frame.frame_url = f"/api/frames/{frame.id}"
+            await bg_db.commit()
+            logger.info(
+                "Stored %d frames for Checkout inspection %d",
+                len(frame_bytes_list),
+                inspection_id,
+            )
+    except Exception as exc:
+        logger.error(
+            "Frame extraction background task failed for inspection %d: %s",
+            inspection_id, exc,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Background task: match a Checkin damage photo to a prior Checkout frame
+# ---------------------------------------------------------------------------
+
+async def _match_frame_bg(media_id: int, photo_bytes: bytes, vehicle_id: int) -> None:
+    """
+    Find the walkaround frame from the most recent Checkout inspection for this
+    vehicle that best matches the damage photo, then store the URL in
+    inspection_media.matching_frame_url.
+    """
+    from database import AsyncSessionLocal
+    from sqlalchemy import select
+    from models.inspection import Inspection
+    from models.inspection_media import InspectionMedia
+    from models.inspection_video_frames import InspectionVideoFrame
+    from services.frame_matching import find_best_matching_frame
+
+    try:
+        async with AsyncSessionLocal() as bg_db:
+            # Find most recent Checkout inspection for the same vehicle
+            result = await bg_db.execute(
+                select(Inspection)
+                .where(
+                    Inspection.vehicle_id == vehicle_id,
+                    Inspection.inspection_type == "Checkout",
+                )
+                .order_by(Inspection.started_at.desc())
+                .limit(1)
+            )
+            checkout = result.scalar_one_or_none()
+            if not checkout:
+                logger.info(
+                    "No prior Checkout inspection found for vehicle %d — skipping frame match",
+                    vehicle_id,
+                )
+                return
+
+            # Load frames for that Checkout inspection
+            frames_result = await bg_db.execute(
+                select(InspectionVideoFrame)
+                .where(InspectionVideoFrame.inspection_id == checkout.id)
+                .order_by(InspectionVideoFrame.frame_index)
+            )
+            frames = frames_result.scalars().all()
+            if not frames:
+                logger.info(
+                    "No frames found for Checkout inspection %d — skipping frame match",
+                    checkout.id,
+                )
+                return
+
+            frame_bytes_list = [bytes(f.frame_data) for f in frames if f.frame_data]
+            if not frame_bytes_list:
+                return
+
+            best_idx = find_best_matching_frame(photo_bytes, frame_bytes_list)
+            if best_idx is None:
+                return
+
+            best_frame = frames[best_idx]
+
+            # Persist the match URL on the InspectionMedia record
+            media = await bg_db.get(InspectionMedia, media_id)
+            if media:
+                media.matching_frame_url = best_frame.frame_url
+                await bg_db.commit()
+                logger.info(
+                    "Frame match stored for media %d → frame %d (%s)",
+                    media_id, best_frame.id, best_frame.frame_url,
+                )
+    except Exception as exc:
+        logger.error(
+            "Frame matching background task failed for media %d: %s",
+            media_id, exc,
+        )
 
 
 # POST /{id}/damage

@@ -23,7 +23,11 @@ from routes.google_oauth import router as google_oauth_router
 from routes.system      import router as system_router
 from routes.admin       import router as admin_router
 from routes.media       import router as media_router
+from routes.frames      import router as frames_router
 from migrations         import run_migrations
+
+# Ensure new models are registered in Base.metadata for create_all
+import models.inspection_video_frames  # noqa: F401
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "frontend_dist"
@@ -52,6 +56,7 @@ app.include_router(google_oauth_router, prefix="/api/auth/google", tags=["google
 app.include_router(system_router,       prefix="/api/system",       tags=["system"])
 app.include_router(admin_router,        prefix="/api/admin",        tags=["admin"])
 app.include_router(media_router,        prefix="/api/media",        tags=["media"])
+app.include_router(frames_router,       prefix="/api/frames",       tags=["frames"])
 
 @app.get("/health", tags=["system"])
 async def health_check():
