@@ -76,17 +76,14 @@ class GoogleDriveBackend(StorageBackend):
 
     async def _get_credentials(self):
         """Build google.oauth2.credentials.Credentials from stored tokens.
-
-        Wraps everything in try/except so any unexpected error (e.g. a
-        timezone comparison crash) returns None instead of propagating.
+        Works with or without a refresh_token.
+        - If refresh_token present: can auto-refresh when expired
+        - If no refresh_token: uses access_token directly while still valid
         """
         try:
             from services.settings_service import (
-                get_setting,
-                set_setting,
-                KEY_GOOGLE_ACCESS_TOKEN,
-                KEY_GOOGLE_REFRESH_TOKEN,
-                KEY_GOOGLE_TOKEN_EXPIRY,
+                get_setting, set_setting,
+                KEY_GOOGLE_ACCESS_TOKEN, KEY_GOOGLE_REFRESH_TOKEN, KEY_GOOGLE_TOKEN_EXPIRY,
             )
             from config import get_settings
             cfg = get_settings()
@@ -98,30 +95,26 @@ class GoogleDriveBackend(StorageBackend):
             if not access_token:
                 return None
 
-            # Google sometimes omits refresh_token on re-auth.
-            # Check if access token is still valid before blocking.
-            _exp_check = None
-            if expiry_str:
-                try:
-                    _exp_check = datetime.fromisoformat(expiry_str)
-                    if _exp_check.tzinfo is None:
-                        _exp_check = _exp_check.replace(tzinfo=timezone.utc)
-                except ValueError:
-                    pass
-            _tok_expired = _exp_check is not None and _exp_check <= datetime.now(timezone.utc)
-            if _tok_expired and not refresh_token:
-                logger.warning("Drive: token expired and no refresh_token")
-                return None
-
-            from google.oauth2.credentials import Credentials
-            from google.auth.transport.requests import Request as GoogleRequest
-
+            # Parse expiry
             expiry = None
             if expiry_str:
                 try:
                     expiry = datetime.fromisoformat(expiry_str)
+                    if expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=timezone.utc)
                 except ValueError:
                     pass
+
+            now = datetime.now(timezone.utc)
+            token_expired = expiry is not None and expiry <= now
+
+            # No refresh token and token expired = can't do anything
+            if token_expired and not refresh_token:
+                logger.warning("Drive: token expired and no refresh_token — reconnect required")
+                return None
+
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request as GoogleRequest
 
             creds = Credentials(
                 token=access_token,
@@ -131,35 +124,20 @@ class GoogleDriveBackend(StorageBackend):
                 client_secret=cfg.google_client_secret,
                 expiry=expiry,
             )
-
-            # Patch naive expiry datetimes to UTC-aware so google-auth's
-            # creds.expired check never raises "can't compare offset-naive
-            # and offset-aware datetimes".
             if creds.expiry and creds.expiry.tzinfo is None:
                 creds.expiry = creds.expiry.replace(tzinfo=timezone.utc)
-            if expiry and expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=timezone.utc)
 
-            # Refresh if expired (or nearly) — only when refresh_token is available
-            if refresh_token and (creds.expired or (
-                expiry and expiry - datetime.now(timezone.utc) < timedelta(minutes=5)
-            ):
+            # Only refresh when we have a refresh_token and token is expired/near-expiry
+            near_expiry = expiry is not None and (expiry - now) < timedelta(minutes=5)
+            if refresh_token and (token_expired or near_expiry):
                 try:
                     loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        None, lambda: creds.refresh(GoogleRequest())
-                    )
+                    await loop.run_in_executor(None, lambda: creds.refresh(GoogleRequest()))
                     await set_setting(self._db, KEY_GOOGLE_ACCESS_TOKEN, creds.token)
                     if creds.refresh_token:
-                        # google-auth occasionally rotates the refresh token;
-                        # persist the new one so we never lose offline access.
                         await set_setting(self._db, KEY_GOOGLE_REFRESH_TOKEN, creds.refresh_token)
                     if creds.expiry:
-                        await set_setting(
-                            self._db,
-                            KEY_GOOGLE_TOKEN_EXPIRY,
-                            creds.expiry.isoformat(),
-                        )
+                        await set_setting(self._db, KEY_GOOGLE_TOKEN_EXPIRY, creds.expiry.isoformat())
                     await self._db.commit()
                     logger.info("Drive: access token refreshed successfully")
                 except Exception as exc:
