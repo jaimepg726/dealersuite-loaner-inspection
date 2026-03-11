@@ -1,10 +1,10 @@
 /**
- * DealerSuite â Porter Home Screen
- * Three large action buttons â Loaner Out, Loaner Return, Manager Review.
+ * DealerSuite - Porter Home Screen
+ * Two large action buttons - New Inspection, Manager Review.
  * Minimal training required for service drive porters.
  */
 import { useNavigate } from 'react-router-dom'
-import { LogOut, LogIn, LayoutDashboard, Power, Clock } from 'lucide-react'
+import { Camera, LayoutDashboard, Power, Clock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 function getGreeting() {
@@ -49,33 +49,18 @@ export default function PorterHome() {
       {/* Main actions */}
       <main className="flex-1 flex flex-col justify-center px-6 gap-4 pb-6">
 
-        {/* Loaner Out */}
+        {/* New Inspection */}
         <button
-          onClick={() => navigate('/scan', { state: { inspectionType: 'checkout' } })}
+          onClick={() => navigate('/scan')}
           className="w-full bg-brand-blue rounded-3xl p-6 flex items-center gap-5
                      shadow-2xl shadow-brand-blue/40 active:scale-95 transition-transform select-none"
         >
           <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center shrink-0">
-            <LogOut className="w-9 h-9 text-white" strokeWidth={1.5} />
+            <Camera className="w-9 h-9 text-white" strokeWidth={1.5} />
           </div>
           <div className="text-left">
-            <p className="text-white text-2xl font-extrabold leading-tight">Loaner Out</p>
-            <p className="text-white/70 text-sm mt-0.5">Customer taking a loaner</p>
-          </div>
-        </button>
-
-        {/* Loaner Return */}
-        <button
-          onClick={() => navigate('/scan', { state: { inspectionType: 'checkin' } })}
-          className="w-full bg-green-700 rounded-3xl p-6 flex items-center gap-5
-                     shadow-2xl shadow-green-700/40 active:scale-95 transition-transform select-none"
-        >
-          <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center shrink-0">
-            <LogIn className="w-9 h-9 text-white" strokeWidth={1.5} />
-          </div>
-          <div className="text-left">
-            <p className="text-white text-2xl font-extrabold leading-tight">Loaner Return</p>
-            <p className="text-white/70 text-sm mt-0.5">Customer returning a loaner</p>
+            <p className="text-white text-2xl font-extrabold leading-tight">New Inspection</p>
+            <p className="text-white/70 text-sm mt-0.5">Start vehicle walkaround</p>
           </div>
         </button>
 
