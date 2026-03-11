@@ -5,27 +5,99 @@
  */
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Video, AlertTriangle, X } from 'lucide-react'
+import { ArrowLeft, Camera, Video, AlertTriangle, X, Loader } from 'lucide-react'
 import api from '../../utils/api'
 
+/** Extract the file ID from any Google Drive URL format. */
+function extractDriveFileId(url) {
+  if (!url) return null
+  // /file/d/FILE_ID/ pattern
+  const m1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+  if (m1) return m1[1]
+  // uc?id=FILE_ID or uc?export=view&id=FILE_ID patterns
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if (m2) return m2[1]
+  return null
+}
+
 /**
- * Convert a raw Google Drive URL to a viewable thumbnail/embed URL.
- * Input:  https://drive.google.com/file/d/FILE_ID/view  or any drive.google.com URL
- * Output: https://drive.google.com/uc?export=view&id=FILE_ID
+ * Convert any Google Drive URL to a direct embeddable URL.
+ * Output: https://drive.google.com/uc?id=FILE_ID&export=view
  */
 function toDriveViewUrl(url) {
   if (!url) return url
-  // Already a direct uc link
-  if (url.includes('uc?export=view')) return url
-  // Extract file ID from /file/d/FILE_ID/ pattern
-  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
-  if (match) return `https://drive.google.com/uc?export=view&id=${match[1]}`
+  // Already a direct uc link — return as-is
+  if (url.includes('drive.google.com/uc')) return url
+  const fileId = extractDriveFileId(url)
+  if (fileId) return `https://drive.google.com/uc?id=${fileId}&export=view`
   return url
+}
+
+/** Return a Drive thumbnail URL for video poster images. */
+function toDriveThumbnailUrl(url) {
+  const fileId = extractDriveFileId(url)
+  if (!fileId) return undefined
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`
+}
+
+/** Single photo thumbnail with loading spinner and DB fallback on error. */
+function PhotoThumb({ m, onOpen }) {
+  const [loading, setLoading] = useState(true)
+  const [useFallback, setUseFallback] = useState(false)
+  const src = useFallback ? `/api/media/${m.id}` : toDriveViewUrl(m.file_url)
+
+  return (
+    <button
+      onClick={() => onOpen(src)}
+      className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
+                 hover:border-brand-blue/60 transition-colors relative"
+    >
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
+          <Loader className="w-5 h-5 text-brand-blue animate-spin" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt="Inspection photo"
+        className="w-full h-full object-cover"
+        loading="lazy"
+        onLoad={() => setLoading(false)}
+        onError={() => { if (!useFallback) { setUseFallback(true) } else { setLoading(false) } }}
+      />
+    </button>
+  )
+}
+
+/** Single video player with loading spinner, poster thumbnail, and DB fallback on error. */
+function VideoPlayer({ m }) {
+  const [loading, setLoading] = useState(true)
+  const [useFallback, setUseFallback] = useState(false)
+  const src = useFallback ? `/api/media/${m.id}` : toDriveViewUrl(m.file_url)
+  const poster = useFallback ? undefined : toDriveThumbnailUrl(m.file_url)
+
+  return (
+    <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid z-10">
+          <Loader className="w-6 h-6 text-brand-blue animate-spin" />
+        </div>
+      )}
+      <video
+        src={src}
+        poster={poster}
+        controls
+        preload="metadata"
+        className="w-full max-h-56 object-contain"
+        onLoadedMetadata={() => setLoading(false)}
+        onError={() => { if (!useFallback) { setUseFallback(true); setLoading(true) } else { setLoading(false) } }}
+      />
+    </div>
+  )
 }
 
 function MediaGallery({ media }) {
   const [modalSrc, setModalSrc] = useState(null)
-  const [modalType, setModalType] = useState(null)
 
   const photos = media.filter((m) => m.media_type === 'photo')
   const videos = media.filter((m) => m.media_type === 'video')
@@ -49,19 +121,7 @@ function MediaGallery({ media }) {
           </p>
           <div className="grid grid-cols-3 gap-2">
             {photos.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => { setModalSrc(toDriveViewUrl(m.file_url)); setModalType('photo') }}
-                className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
-                           hover:border-brand-blue/60 transition-colors"
-              >
-                <img
-                  src={toDriveViewUrl(m.file_url)}
-                  alt="Inspection photo"
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
-              </button>
+              <PhotoThumb key={m.id} m={m} onOpen={(src) => setModalSrc(src)} />
             ))}
           </div>
         </div>
@@ -75,24 +135,14 @@ function MediaGallery({ media }) {
           </p>
           <div className="flex flex-col gap-3">
             {videos.map((m) => (
-              <div
-                key={m.id}
-                className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent"
-              >
-                <video
-                  src={toDriveViewUrl(m.file_url)}
-                  controls
-                  className="w-full max-h-56 object-contain"
-                  preload="metadata"
-                />
-              </div>
+              <VideoPlayer key={m.id} m={m} />
             ))}
           </div>
         </div>
       )}
 
       {/* Photo modal */}
-      {modalSrc && modalType === 'photo' && (
+      {modalSrc && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setModalSrc(null)}
