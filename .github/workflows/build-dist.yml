@@ -1,40 +1,27 @@
 name: Build and commit dist
 on:
   push:
-    branches: ['claude/fix-drive-no-refresh-token']
-    paths:
-      - 'frontend/src/**'
-      - 'frontend/package*.json'
-      - 'frontend/vite.config.*'
-      - '.github/workflows/build-dist.yml'
-
+    branches: ['claude/fix-drive-syntax-error']
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: claude/fix-settings-nav-drive
+          ref: claude/fix-drive-syntax-error
           fetch-depth: 0
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: cd frontend && npm ci
-
-      - name: Build
-        run: cd frontend && npm run build
-
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run build
       - name: Commit dist
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/dist -f
-          git diff --staged --quiet && echo "No changes" || (git commit -m "chore: rebuild dist [skip ci]" && git push origin claude/fix-settings-nav-drive)
+          git diff --staged --quiet && echo "No changes" || (git commit -m "chore: rebuild dist [skip ci]" && git push origin claude/fix-drive-syntax-error)
