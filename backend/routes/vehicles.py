@@ -15,7 +15,7 @@ from dependencies import get_current_user, require_manager
 from schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse, VehicleListResponse
 from services.vehicle_service import (
     list_vehicles, get_vehicle_by_id, get_vehicle_by_vin,
-    create_vehicle, update_vehicle,
+    get_vehicle_by_loaner_number, create_vehicle, update_vehicle,
 )
 
 router = APIRouter()
@@ -42,6 +42,16 @@ async def route_get_by_vin(
 ):
     """Called immediately after a porter scans a VIN barcode or OCR."""
     return await get_vehicle_by_vin(db, vin)
+
+
+@router.get("/loaner/{loaner_number}", response_model=VehicleResponse, summary="Look up vehicle by loaner number")
+async def route_get_by_loaner_number(
+    loaner_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Called when a porter enters a loaner number manually instead of scanning a VIN."""
+    return await get_vehicle_by_loaner_number(db, loaner_number)
 
 
 @router.get("/{vehicle_id}", response_model=VehicleResponse, summary="Get single vehicle")
