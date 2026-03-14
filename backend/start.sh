@@ -4,10 +4,9 @@
 # Order of operations:
 #   1. Run Alembic migrations (idempotent — safe on every deploy)
 #   2. Seed the default admin + manager accounts (skips if they already exist)
-#   3. Start the FastAPI/uvicorn server
+#   3. Start the FastAPI server via gunicorn (single worker, low RAM)
 #
-# This script is called by railway.toml startCommand so it runs inside the
-# Railway container with all environment variables already injected.
+# Railway injects PORT and DATABASE_URL automatically.
 
 set -e   # exit immediately on any error
 
@@ -21,5 +20,5 @@ echo "[2/3] Seeding default users..."
 python seed.py
 echo "      Seed complete."
 
-echo "[3/3] Starting uvicorn..."
-exec python -m uvicorn main:app --host 0.0.0.0 --port 8000
+echo "[3/3] Starting gunicorn (1 worker)..."
+exec gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind "0.0.0.0:${PORT:-8000}" --timeout 60 --worker-tmp-dir /dev/shm

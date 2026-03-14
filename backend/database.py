@@ -3,10 +3,13 @@ DealerSuite — Async SQLAlchemy database session
 Supports PostgreSQL (Railway production) and SQLite (local dev fallback)
 """
 
+import asyncio
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # ---------------------------------------------------------------------------
@@ -31,6 +34,7 @@ engine = create_async_engine(
     pool_pre_ping=True,                           # drop stale connections
     pool_size=5,
     max_overflow=10,
+    pool_recycle=300,                             # recycle connections every 5 min
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -48,15 +52,27 @@ class Base(DeclarativeBase):
 
 
 # ---------------------------------------------------------------------------
-# FastAPI dependency — yields an async DB session per request
+# FastAPI dependency — yields an async DB session per request.
+# Implements exponential backoff retry to survive Postgres recovery restarts.
 # ---------------------------------------------------------------------------
 async def get_db() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
+    last_exc = None
+    for attempt in range(4):
+        if attempt > 0:
+            wait = 2 ** attempt  # 2, 4, 8 seconds
+            logger.warning("DB connection attempt %d failed, retrying in %ds: %s", attempt, wait, last_exc)
+            await asyncio.sleep(wait)
         try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+            async with AsyncSessionLocal() as session:
+                try:
+                    yield session
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+                finally:
+                    await session.close()
+            return
+        except Exception as exc:
+            last_exc = exc
+    raise last_exc
