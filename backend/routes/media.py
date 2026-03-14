@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from dependencies import get_current_user
 from models.inspection_media import InspectionMedia
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ def _extract_file_id(url: str | None) -> str | None:
 async def serve_media(
     media_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     result = await db.execute(
         select(InspectionMedia).where(InspectionMedia.id == media_id)

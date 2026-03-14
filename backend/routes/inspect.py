@@ -71,6 +71,14 @@ class MediaMetadata(BaseModel):
     damage_location: str | None = None
 
 
+class FinalizeUploadBody(BaseModel):
+    drive_file_id: str
+    mime_type:     str | None = None
+    media_type:    str        = "photo"   # "photo" | "video"
+    file_size:     int | None = None
+    file_hash:     str | None = None
+
+
 class MediaResponse(BaseModel):
     id:        int
     file_url:  str
@@ -245,6 +253,61 @@ async def save_media_metadata(
     await db.refresh(record)
 
     logger.info("Drive: saved media metadata id=%d file_id=%s", record.id, body.drive_file_id)
+    return MediaResponse(id=record.id, file_url=record.file_url, media_type=record.media_type)
+
+
+# ── POST /{id}/finalize-upload ───────────────────────────────────────────────
+
+@router.post(
+    "/{inspection_id}/finalize-upload",
+    response_model=MediaResponse,
+    status_code=201,
+    summary="Finalize a Direct-to-Drive upload and persist media record",
+)
+async def finalize_upload(
+    inspection_id: int,
+    body: FinalizeUploadBody,
+    db:   AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Called by the browser after it finishes uploading a file directly to Drive
+    via the resumable upload URL.  Persists the Drive file ID and a standard
+    view URL to PostgreSQL with file_data = NULL (no binary data on Railway).
+    Also grants public-reader permission on the file (best-effort).
+    """
+    from models.inspection_media import InspectionMedia
+    from storage.drive_backend import set_file_public
+    from utils.time import utcnow as _utcnow
+
+    await get_inspection_by_id(db, inspection_id)
+
+    content_type = (body.mime_type or "").lower().split(";")[0].strip() or None
+    file_url = f"https://drive.google.com/uc?id={body.drive_file_id}&export=view"
+
+    try:
+        await set_file_public(db, body.drive_file_id)
+    except Exception as exc:
+        logger.warning("Drive: could not set file public for %s — %s", body.drive_file_id, exc)
+
+    record = InspectionMedia(
+        inspection_id=inspection_id,
+        file_data=None,
+        file_url=file_url,
+        drive_file_id=body.drive_file_id,
+        drive_url=file_url,
+        media_type=body.media_type,
+        mime_type=content_type,
+        file_size=body.file_size,
+        file_hash=body.file_hash,
+        uploaded_at=_utcnow(),
+        created_at=_utcnow(),
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+
+    logger.info("Drive: finalized media id=%d file_id=%s", record.id, body.drive_file_id)
     return MediaResponse(id=record.id, file_url=record.file_url, media_type=record.media_type)
 
 

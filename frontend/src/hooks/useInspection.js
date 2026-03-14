@@ -13,6 +13,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import axios from 'axios'
 import api from '../utils/api'
 import {
   compressImage,
@@ -81,12 +82,12 @@ export default function useInspection() {
   async function _uploadToDrive(inspectionId, blob, mediaType, damageLocation) {
     const mimeType = blob.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg')
 
-    // 1. Compress image before upload (Canvas API — no backend cost)
+    // Phase A — compress image before upload (Canvas API — no backend cost)
     const finalBlob = mediaType === 'photo'
       ? await compressImage(blob, { maxDimension: 1920, quality: 0.82 })
       : blob
 
-    // 2. Request resumable upload session URL from backend
+    // Phase A — request a Drive resumable upload session URL from the backend
     const { data: session } = await api.post(
       `/api/inspect/${inspectionId}/upload-session`,
       {
@@ -98,32 +99,31 @@ export default function useInspection() {
 
     const { upload_url: uploadUrl, filename } = session
 
-    // 3. PUT file directly to Drive — backend receives ZERO bytes of media
-    const driveResp = await fetch(uploadUrl, {
-      method:  'PUT',
+    // Phase B — PUT bytes directly to Drive via axios so onUploadProgress fires
+    // (the backend receives ZERO bytes of media payload)
+    const driveResp = await axios.put(uploadUrl, finalBlob, {
       headers: { 'Content-Type': mimeType },
-      body:    finalBlob,
+      onUploadProgress: (evt) => {
+        if (evt.total) {
+          setUploadPct(Math.round((evt.loaded / evt.total) * 100))
+        }
+      },
     })
 
-    if (!driveResp.ok) {
-      const txt = await driveResp.text().catch(() => '')
-      throw new Error(`Drive upload failed ${driveResp.status}: ${txt.slice(0, 200)}`)
+    const driveFileId = driveResp.data?.id
+    if (!driveFileId) {
+      throw new Error('Drive did not return a file ID after upload')
     }
 
-    const driveData  = await driveResp.json()
-    const driveFileId = driveData.id
-    const fileUrl    = DRIVE_FILE_URL(driveFileId)
-
-    // 4. Save metadata to backend
-    const { data: meta } = await api.post(`/api/inspect/${inspectionId}/media`, {
-      drive_file_id:   driveFileId,
-      file_url:        fileUrl,
-      filename,
-      media_type:      mediaType,
-      mime_type:       mimeType,
-      damage_location: damageLocation || null,
+    // Phase C — persist metadata in Railway via the finalize-upload endpoint
+    const { data: meta } = await api.post(`/api/inspect/${inspectionId}/finalize-upload`, {
+      drive_file_id: driveFileId,
+      mime_type:     mimeType,
+      media_type:    mediaType,
+      file_size:     finalBlob.size,
     })
 
+    const fileUrl = DRIVE_FILE_URL(driveFileId)
     return { file_id: String(meta.id), file_url: fileUrl, filename }
   }
 
