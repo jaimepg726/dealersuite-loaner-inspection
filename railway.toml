@@ -1,7 +1,7 @@
 # ── DealerSuite Loaner Inspection — Railway deployment config ─────────────────
 #
 # Multi-stage Dockerfile build:
-#   Stage 1 (node:20-alpine)     → npm ci + vite build → dist/
+#   Stage 1 (node:18-alpine)     → npm ci + vite build → dist/
 #   Stage 2 (python:3.11-slim)   → pip install + copy dist → FastAPI serves both
 #
 # FastAPI serves /api/* routes AND the React SPA from the same Railway URL.
@@ -11,16 +11,17 @@
 #   DATABASE_URL                    — auto-injected by Railway PostgreSQL plugin
 #   JWT_SECRET                      — long random string
 #   FRONTEND_URL                    — set to your Railway app URL after first deploy
-#   GOOGLE_SERVICE_ACCOUNT_JSON     — (optional) base64-encoded service account JSON
+#   GOOGLE_CLIENT_ID                — from Google Cloud OAuth credentials
+#   GOOGLE_CLIENT_SECRET            — from Google Cloud OAuth credentials
 #   ENVIRONMENT                     — production
 
 [build]
-builder      = "DOCKERFILE"
+builder        = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand     = "sh start.sh"
-healthcheckPath  = "/health"
-healthcheckTimeout = 300
-restartPolicyType = "ON_FAILURE"
+startCommand           = "gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+healthcheckPath        = "/api/health"
+healthcheckTimeout     = 300
+restartPolicyType      = "ON_FAILURE"
 restartPolicyMaxRetries = 3

@@ -1,15 +1,14 @@
-"""DealerSuite - Inspection Routes (Batch 3: StorageBackend abstraction)
-POST /api/inspect/start             -> porter begins inspection
-POST /api/inspect/{id}/complete     -> porter finalises
-POST /api/inspect/{id}/upload       -> upload media via StorageBackend
-POST /api/inspect/{id}/damage       -> log damage item
-GET  /api/inspect/{id}              -> inspection detail
+"""DealerSuite - Inspection Routes (Direct-to-Drive architecture)
+
+POST /api/inspect/start                  → porter begins inspection
+POST /api/inspect/{id}/complete          → porter finalises
+POST /api/inspect/{id}/upload-session    → get a Drive resumable upload URL (no payload)
+POST /api/inspect/{id}/media             → save Drive file metadata after browser upload
+POST /api/inspect/{id}/damage            → log damage item
+GET  /api/inspect/{id}                   → inspection detail
 """
-import asyncio
-import hashlib
 import logging
-import re
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -28,23 +27,58 @@ from services.inspection_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+ALLOWED_IMAGE_MIMETYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_VIDEO_MIMETYPES = {"video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"}
+ALLOWED_MIMETYPES = ALLOWED_IMAGE_MIMETYPES | ALLOWED_VIDEO_MIMETYPES
 
+_MIME_EXT_MAP = {
+    "video/mp4":      "mp4",
+    "video/quicktime": "mov",
+    "video/webm":     "webm",
+    "video/x-msvideo": "avi",
+    "image/jpeg":     "jpg",
+    "image/png":      "png",
+    "image/webp":     "webp",
+}
+
+
+# ── Request / Response schemas ───────────────────────────────────────────────
 
 class CompleteBody(BaseModel):
     photo_count: int = 0
     notes: str | None = None
 
 
-class UploadResponse(BaseModel):
-    file_id: str | None
-    file_url: str | None
-    filename: str
-    bytes_uploaded: int
-    backend: str = "local"
+class UploadSessionRequest(BaseModel):
+    mimetype:        str
+    filename:        str | None = None
+    media_type:      str        = "photo"   # "photo" | "video"
+    damage_location: str | None = None
 
 
-# POST /start
+class UploadSessionResponse(BaseModel):
+    upload_url: str          # the Drive resumable upload URI
+    filename:   str          # the generated filename to include in metadata save
+
+
+class MediaMetadata(BaseModel):
+    drive_file_id: str
+    file_url:      str
+    filename:      str
+    media_type:    str        # "photo" | "video"
+    mime_type:     str | None = None
+    damage_location: str | None = None
+
+
+class MediaResponse(BaseModel):
+    id:        int
+    file_url:  str
+    media_type: str
+    backend:   str = "drive"
+
+
+# ── POST /start ──────────────────────────────────────────────────────────────
+
 @router.post(
     "/start",
     response_model=InspectionResponse,
@@ -53,37 +87,26 @@ class UploadResponse(BaseModel):
 )
 async def start_inspection(
     data: InspectionStart,
-    db: AsyncSession = Depends(get_db),
+    db:   AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # 1. Save inspection record immediately - upload failures never block this
+    import asyncio
     inspection = await _start(db, data, current_user)
-    snapshot = await get_inspection_by_id(db, inspection.id)
-
-    # 2. Create Drive folder in background (non-blocking)
+    snapshot   = await get_inspection_by_id(db, inspection.id)
     asyncio.create_task(_create_drive_folder_bg(inspection.id, snapshot))
     return snapshot
 
 
 async def _create_drive_folder_bg(inspection_id: int, inspection) -> None:
-    """Background: create Drive folder hierarchy and write IDs back."""
     from database import AsyncSessionLocal
-    from storage import GoogleDriveBackend
-
+    from storage.drive_backend import ensure_folders, get_valid_access_token
     try:
         async with AsyncSessionLocal() as bg_db:
-            drive = GoogleDriveBackend(bg_db)
-            if not await drive.is_available():
-                logger.info("Drive: not connected - skipping folder creation for inspection %d", inspection_id)
+            token = await get_valid_access_token(bg_db)
+            if not token:
+                logger.info("Drive: not connected — skipping folder creation for inspection %d", inspection_id)
                 return
-
-            vehicle = inspection.vehicle
-            loaner  = vehicle.loaner_number if vehicle else None
-            vin     = vehicle.vin if vehicle else "UNKNOWN"
-
-            folders = await drive._ensure_folders()
-            # We don't create per-inspection subfolders here - files go into
-            # the top-level inspections or damage folder with descriptive names
+            folders = await ensure_folders(bg_db)
             if folders.get("inspections"):
                 await update_drive_folder(
                     bg_db,
@@ -94,10 +117,11 @@ async def _create_drive_folder_bg(inspection_id: int, inspection) -> None:
                 await bg_db.commit()
                 logger.info("Drive: folder linked for inspection %d", inspection_id)
     except Exception as exc:
-        logger.error("Drive: background folder task failed for inspection %d - %s", inspection_id, exc)
+        logger.error("Drive: background folder task failed for inspection %d — %s", inspection_id, exc)
 
 
-# POST /{id}/complete
+# ── POST /{id}/complete ──────────────────────────────────────────────────────
+
 @router.post(
     "/{inspection_id}/complete",
     response_model=InspectionResponse,
@@ -106,159 +130,122 @@ async def _create_drive_folder_bg(inspection_id: int, inspection) -> None:
 async def complete_inspection(
     inspection_id: int,
     body: CompleteBody,
-    db: AsyncSession = Depends(get_db),
+    db:   AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     inspection = await _complete(db, inspection_id, body.photo_count, body.notes)
     return await get_inspection_by_id(db, inspection.id)
 
 
-ALLOWED_IMAGE_MIMETYPES = {"image/jpeg", "image/png", "image/webp"}
-ALLOWED_VIDEO_MIMETYPES = {"video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"}
-ALLOWED_MIMETYPES = ALLOWED_IMAGE_MIMETYPES | ALLOWED_VIDEO_MIMETYPES
+# ── POST /{id}/upload-session ────────────────────────────────────────────────
 
-_VIDEO_EXT_MAP = {
-    "video/mp4": "mp4",
-    "video/quicktime": "mov",
-    "video/webm": "webm",
-    "video/x-msvideo": "avi",
-}
-
-_MIME_EXT_MAP = {
-    **_VIDEO_EXT_MAP,
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-}
-
-
-# POST /{id}/upload
 @router.post(
-    "/{inspection_id}/upload",
-    response_model=UploadResponse,
-    summary="Upload video or photo, stored in database",
+    "/{inspection_id}/upload-session",
+    response_model=UploadSessionResponse,
+    summary="Request a Drive resumable upload session URL",
 )
-async def upload_media(
+async def get_upload_session(
     inspection_id: int,
-    file: UploadFile = File(...),
-    damage_location: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
+    body: UploadSessionRequest,
+    db:   AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    from models.inspection_media import InspectionMedia
-    from utils.time import utcnow as _utcnow
+    """
+    The browser calls this endpoint to obtain a Resumable Upload Session URL.
+    The backend uses the stored OAuth token to request the URL from Drive,
+    then returns it. The browser then PUTs the media DIRECTLY to Drive —
+    the backend never receives the raw file bytes.
+    """
+    from storage.drive_backend import (
+        create_resumable_upload_session,
+        build_filename,
+        get_valid_access_token,
+    )
 
-    # 1. Confirm inspection exists before upload
-    inspection = await get_inspection_by_id(db, inspection_id)
+    # Confirm inspection exists
+    await get_inspection_by_id(db, inspection_id)
 
-    content = await file.read(MAX_UPLOAD_BYTES + 1)
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds the 100 MB limit")
+    # Strip codec parameters from MIME (e.g. "video/webm;codecs=vp9" → "video/webm")
+    raw_mime    = (body.mimetype or "").lower()
+    content_type = raw_mime.split(";")[0].strip()
 
-    # 2 & 3. Validate MIME type and determine media_type from content_type.
-    # Strip codec parameters (e.g. "video/webm;codecs=vp9" → "video/webm") before
-    # the set lookup so MediaRecorder blobs with codec suffixes pass validation.
-    raw_content_type = (file.content_type or "").lower()
-    content_type     = raw_content_type.split(";")[0].strip()  # base MIME only
-
-    if content_type.startswith("image/"):
-        media_type = "photo"
-    elif content_type.startswith("video/"):
-        media_type = "video"
-    else:
-        raise HTTPException(
-            status_code=415,
-            detail=f"Unsupported media type '{content_type}'. Must be image or video.",
-        )
     if content_type not in ALLOWED_MIMETYPES:
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported MIME type '{content_type}'. Allowed: {', '.join(sorted(ALLOWED_MIMETYPES))}",
         )
 
-    # 4a. Generate SHA-256 hash and check for duplicate within this inspection
-    file_hash = hashlib.sha256(content).hexdigest()
-    dup_result = await db.execute(
-        select(InspectionMedia).where(
-            InspectionMedia.inspection_id == inspection_id,
-            InspectionMedia.file_hash == file_hash,
-        )
-    )
-    existing_media = dup_result.scalar_one_or_none()
-    if existing_media:
-        logger.info(
-            "Duplicate media skipped for inspection %d (hash=%s, existing id=%d)",
-            inspection_id, file_hash, existing_media.id,
-        )
-        return UploadResponse(
-            file_id=str(existing_media.id),
-            file_url=existing_media.file_url,
-            filename=file.filename or f"{media_type}_{existing_media.id}",
-            bytes_uploaded=len(content),
-            backend="deduplicated",
-        )
+    ext           = _MIME_EXT_MAP.get(content_type, "bin")
+    media_type    = "video" if content_type.startswith("video/") else "photo"
+    folder_hint   = "inspections" if media_type == "video" else "damage"
+    suffix        = body.damage_location if media_type == "photo" and body.damage_location else ""
 
-    # 4b. Insert media record — store raw bytes in DB (survives redeploys, no /tmp)
+    inspection    = await get_inspection_by_id(db, inspection_id)
+    loaner_number = inspection.vehicle.loaner_number if inspection.vehicle else None
+    insp_type     = (inspection.inspection_type or "inspection").lower()
+
+    filename = body.filename or build_filename(loaner_number, insp_type, ext, suffix=suffix)
+
+    try:
+        upload_url = await create_resumable_upload_session(db, filename, content_type, folder_hint)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    return UploadSessionResponse(upload_url=upload_url, filename=filename)
+
+
+# ── POST /{id}/media ─────────────────────────────────────────────────────────
+
+@router.post(
+    "/{inspection_id}/media",
+    response_model=MediaResponse,
+    status_code=201,
+    summary="Save Drive file metadata after browser completes direct upload",
+)
+async def save_media_metadata(
+    inspection_id: int,
+    body: MediaMetadata,
+    db:   AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Called by the browser after it finishes uploading a file directly to Drive.
+    Persists the Drive file ID and public URL to PostgreSQL.
+    Also grants public-reader permission on the file.
+    """
+    from models.inspection_media import InspectionMedia
+    from storage.drive_backend import set_file_public
+    from utils.time import utcnow as _utcnow
+
+    # Confirm inspection exists
+    await get_inspection_by_id(db, inspection_id)
+
+    content_type = (body.mime_type or "").lower().split(";")[0].strip() or None
+
+    # Grant public access to the Drive file (best-effort, non-fatal)
+    try:
+        await set_file_public(db, body.drive_file_id)
+    except Exception as exc:
+        logger.warning("Drive: could not set file public for %s — %s", body.drive_file_id, exc)
+
     record = InspectionMedia(
         inspection_id=inspection_id,
-        file_url="",           # updated below once we have the row ID
-        media_type=media_type,
-        mime_type=content_type,  # base MIME without codec params
-        file_data=content,
-        file_hash=file_hash,
+        file_url=body.file_url,
+        drive_file_id=body.drive_file_id,
+        media_type=body.media_type,
+        mime_type=content_type,
         created_at=_utcnow(),
     )
     db.add(record)
-    await db.flush()           # populate record.id without committing
-
-    # 5. Set file_url to the permanent serve endpoint
-    record.file_url = f"/api/media/{record.id}"
     await db.commit()
+    await db.refresh(record)
 
-    # 6. Attempt Drive upload opportunistically — DB record is the fallback.
-    #    Retry once if the first attempt fails (network hiccup, token refresh, etc.).
-    #    If Drive is connected and upload succeeds, update file_url to the
-    #    Drive URL so there is a permanent off-DB copy as well.
-    final_backend = "database"
-    try:
-        from storage.drive_backend import GoogleDriveBackend, build_filename as _build_filename
-        drive = GoogleDriveBackend(db)
-        creds = await drive._get_credentials()
-        if creds:
-            folder_hint = "inspections" if media_type == "video" else "damage"
-            loaner_number = inspection.vehicle.loaner_number if inspection.vehicle else None
-            insp_type = (inspection.inspection_type or "inspection").lower()
-            ext = _MIME_EXT_MAP.get(content_type, "bin")
-            suffix = damage_location if media_type == "photo" and damage_location else ""
-            drive_filename = _build_filename(loaner_number, insp_type, ext, suffix=suffix)
-            drive_result = None
-            for attempt in range(2):
-                try:
-                    drive_result = await drive.upload_file(content, drive_filename, content_type, folder_hint)
-                    if drive_result.success:
-                        break
-                except Exception as upload_exc:
-                    logger.warning("Drive upload attempt %d failed for media %d: %s", attempt + 1, record.id, upload_exc)
-                    if attempt == 1:
-                        raise
-            if drive_result and drive_result.success and drive_result.file_url:
-                record.file_url = drive_result.file_url
-                await db.commit()
-                final_backend = "drive"
-                logger.info("Drive upload succeeded for media %d: %s", record.id, drive_result.file_url)
-    except Exception as exc:
-        logger.warning("Drive upload skipped for media %d: %s", record.id, exc)
-
-    return UploadResponse(
-        file_id=str(record.id),
-        file_url=record.file_url,
-        filename=file.filename or f"{media_type}_{record.id}",
-        bytes_uploaded=len(content),
-        backend=final_backend,
-    )
+    logger.info("Drive: saved media metadata id=%d file_id=%s", record.id, body.drive_file_id)
+    return MediaResponse(id=record.id, file_url=record.file_url, media_type=record.media_type)
 
 
-# POST /{id}/damage
+# ── POST /{id}/damage ────────────────────────────────────────────────────────
+
 @router.post(
     "/{inspection_id}/damage",
     response_model=DamageResponse,
@@ -268,7 +255,7 @@ async def upload_media(
 async def log_damage(
     inspection_id: int,
     data: PorterDamageInput,
-    db: AsyncSession = Depends(get_db),
+    db:   AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     from services.damage_service import create_damage
@@ -278,7 +265,8 @@ async def log_damage(
     return damage
 
 
-# GET /{id}
+# ── GET /{id} ────────────────────────────────────────────────────────────────
+
 @router.get(
     "/{inspection_id}",
     response_model=InspectionResponse,
@@ -286,7 +274,7 @@ async def log_damage(
 )
 async def get_inspection(
     inspection_id: int,
-    db: AsyncSession = Depends(get_db),
+    db:   AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     return await get_inspection_by_id(db, inspection_id)

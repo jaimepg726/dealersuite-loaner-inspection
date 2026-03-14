@@ -1,32 +1,45 @@
 /**
  * useInspection — manages the lifecycle of an active inspection.
  *
- * Usage:
- *   const { inspection, starting, error, start, complete, uploadFile } = useInspection()
- *
- * Flow:
+ * Direct-to-Drive upload architecture:
  *   1. call start(vehicleId, type)         → POSTs /api/inspect/start
- *   2. Drive folder is created in background; poll until drive_folder_id appears
- *   3. call uploadFile(blob, 'video'|'photo', location?) → POSTs /api/inspect/{id}/upload
- *   4. call complete(photoCount, notes)    → POSTs /api/inspect/{id}/complete
+ *   2. call uploadFile(blob, type, loc?)
+ *        a. Compress image via Canvas API (photos only)
+ *        b. POST /api/inspect/{id}/upload-session → { upload_url, filename }
+ *        c. PUT blob directly to Drive resumable URL (browser → Drive, zero backend RAM)
+ *        d. POST /api/inspect/{id}/media with file metadata
+ *        e. On failure: enqueue in IndexedDB for later retry
+ *   3. call complete(photoCount, notes)    → POSTs /api/inspect/{id}/complete
  */
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import api from '../utils/api'
+import {
+  compressImage,
+  enqueueMedia,
+  startQueueFlusher,
+  stopQueueFlusher,
+} from '../utils/mediaQueue'
 
-const POLL_INTERVAL_MS = 2500   // check for Drive folder every 2.5 s
-const POLL_MAX_TRIES   = 12     // give up after ~30 s
+const POLL_INTERVAL_MS = 2500
+const POLL_MAX_TRIES   = 12
+
+const DRIVE_FILE_URL = (id) => `https://drive.google.com/uc?id=${id}&export=view`
 
 export default function useInspection() {
-  const [inspection, setInspection] = useState(null)  // full InspectionResponse
+  const [inspection, setInspection] = useState(null)
   const [starting,   setStarting]   = useState(false)
   const [uploading,  setUploading]  = useState(false)
   const [uploadPct,  setUploadPct]  = useState(0)
   const [error,      setError]      = useState(null)
 
-  const pollRef = useRef(null)
+  const pollRef       = useRef(null)
+  const inspectionRef = useRef(null)   // stable ref for queue flusher closure
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // Keep ref in sync with state
+  useEffect(() => { inspectionRef.current = inspection }, [inspection])
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
   function clearPoll() {
     if (pollRef.current) {
@@ -40,12 +53,11 @@ export default function useInspection() {
     return data
   }
 
-  // ── Poll for Drive folder ──────────────────────────────────────────────────
+  // ── Poll for Drive folder ─────────────────────────────────────────────────
 
   function startPollingForFolder(id) {
     let tries = 0
     clearPoll()
-
     pollRef.current = setInterval(async () => {
       tries++
       try {
@@ -55,7 +67,6 @@ export default function useInspection() {
           clearPoll()
         } else if (tries >= POLL_MAX_TRIES) {
           clearPoll()
-          // Stop polling but don't block — Drive may just not be configured
           console.warn('Drive folder not ready after polling — Drive may be disabled')
         }
       } catch (err) {
@@ -65,7 +76,58 @@ export default function useInspection() {
     }, POLL_INTERVAL_MS)
   }
 
-  // ── Start ──────────────────────────────────────────────────────────────────
+  // ── Direct Drive upload ───────────────────────────────────────────────────
+
+  async function _uploadToDrive(inspectionId, blob, mediaType, damageLocation) {
+    const mimeType = blob.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg')
+
+    // 1. Compress image before upload (Canvas API — no backend cost)
+    const finalBlob = mediaType === 'photo'
+      ? await compressImage(blob, { maxDimension: 1920, quality: 0.82 })
+      : blob
+
+    // 2. Request resumable upload session URL from backend
+    const { data: session } = await api.post(
+      `/api/inspect/${inspectionId}/upload-session`,
+      {
+        mimetype:        mimeType,
+        media_type:      mediaType,
+        damage_location: damageLocation || null,
+      },
+    )
+
+    const { upload_url: uploadUrl, filename } = session
+
+    // 3. PUT file directly to Drive — backend receives ZERO bytes of media
+    const driveResp = await fetch(uploadUrl, {
+      method:  'PUT',
+      headers: { 'Content-Type': mimeType },
+      body:    finalBlob,
+    })
+
+    if (!driveResp.ok) {
+      const txt = await driveResp.text().catch(() => '')
+      throw new Error(`Drive upload failed ${driveResp.status}: ${txt.slice(0, 200)}`)
+    }
+
+    const driveData  = await driveResp.json()
+    const driveFileId = driveData.id
+    const fileUrl    = DRIVE_FILE_URL(driveFileId)
+
+    // 4. Save metadata to backend
+    const { data: meta } = await api.post(`/api/inspect/${inspectionId}/media`, {
+      drive_file_id:   driveFileId,
+      file_url:        fileUrl,
+      filename,
+      media_type:      mediaType,
+      mime_type:       mimeType,
+      damage_location: damageLocation || null,
+    })
+
+    return { file_id: String(meta.id), file_url: fileUrl, filename }
+  }
+
+  // ── Start ─────────────────────────────────────────────────────────────────
 
   const start = useCallback(async (vehicleId, type) => {
     setStarting(true)
@@ -76,12 +138,9 @@ export default function useInspection() {
         inspection_type: type,
       })
       setInspection(data)
-
-      // If Drive folder not yet created, poll until it is
       if (!data.drive_folder_id) {
         startPollingForFolder(data.id)
       }
-
       return data
     } catch (err) {
       const msg = err.response?.data?.detail || 'Could not start inspection'
@@ -92,61 +151,52 @@ export default function useInspection() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
+  // ── Upload ────────────────────────────────────────────────────────────────
 
   const uploadFile = useCallback(async (
     blob,
-    mediaType,              // 'video' | 'photo'
-    damageLocation = null,  // required for photos
+    mediaType,
+    damageLocation = null,
   ) => {
     if (!inspection?.id) throw new Error('No active inspection')
+    const inspectionId = inspection.id
 
     setUploading(true)
     setUploadPct(0)
     setError(null)
 
     try {
-      const form = new FormData()
-      const ext  = mediaType === 'video' ? 'mp4' : 'jpg'
-      form.append('file', blob, `${mediaType}.${ext}`)
-
-      const params = new URLSearchParams({ media_type: mediaType })
-      if (damageLocation) params.set('damage_location', damageLocation)
-
-      const { data } = await api.post(
-        `/api/inspect/${inspection.id}/upload?${params}`,
-        form,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (evt) => {
-            if (evt.total) {
-              setUploadPct(Math.round((evt.loaded * 100) / evt.total))
-            }
-          },
-        },
-      )
-
-      // Refresh inspection to get updated video_url
-      const updated = await fetchInspection(inspection.id)
-      setInspection(updated)
-
-      return data   // { file_id, file_url, filename, bytes_uploaded }
+      const result = await _uploadToDrive(inspectionId, blob, mediaType, damageLocation)
+      setUploadPct(100)
+      return result
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Upload failed'
-      setError(msg)
+      // On failure, queue in IndexedDB for offline retry
+      console.warn('Drive upload failed — queuing for retry:', err)
+      try {
+        await enqueueMedia({
+          inspectionId,
+          blob,
+          mediaType,
+          mimeType:      blob.type || '',
+          damageLocation,
+        })
+        console.info('[mediaQueue] item enqueued for retry')
+      } catch (qErr) {
+        console.error('[mediaQueue] failed to enqueue:', qErr)
+      }
+      // Re-throw so callers can handle gracefully (non-fatal in InspectPage)
       throw err
     } finally {
       setUploading(false)
       setUploadPct(0)
     }
-  }, [inspection])
+  }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Complete ───────────────────────────────────────────────────────────────
+  // ── Complete ──────────────────────────────────────────────────────────────
 
   const complete = useCallback(async (photoCount = 0, notes = null) => {
     if (!inspection?.id) throw new Error('No active inspection')
     setError(null)
-
     try {
       const { data } = await api.post(`/api/inspect/${inspection.id}/complete`, {
         photo_count: photoCount,
@@ -160,18 +210,37 @@ export default function useInspection() {
       setError(msg)
       throw err
     }
-  }, [inspection])
+  }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Reset ──────────────────────────────────────────────────────────────────
+  // ── Reset ─────────────────────────────────────────────────────────────────
 
   const reset = useCallback(() => {
     clearPoll()
+    stopQueueFlusher()
     setInspection(null)
     setStarting(false)
     setUploading(false)
     setUploadPct(0)
     setError(null)
   }, [])
+
+  // ── Start queue flusher on mount ──────────────────────────────────────────
+
+  useEffect(() => {
+    // When the hook mounts, start the online listener so queued items
+    // retry as soon as connectivity is restored.
+    startQueueFlusher(async (item) => {
+      const insp = inspectionRef.current
+      if (!insp?.id) return
+      await _uploadToDrive(
+        item.inspectionId,
+        item.blob,
+        item.mediaType,
+        item.damageLocation,
+      )
+    })
+    return () => stopQueueFlusher()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     inspection,

@@ -8,7 +8,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy import text
 
 from config import get_settings
 from database import engine, Base, AsyncSessionLocal
@@ -57,8 +58,32 @@ app.include_router(admin_router,        prefix="/api/admin",        tags=["admin
 app.include_router(media_router,        prefix="/api/media",        tags=["media"])
 
 @app.get("/health", tags=["system"])
+async def health_check_legacy():
+    """Legacy health endpoint — kept for backward compatibility."""
+    return {"status": "ok", "app": settings.app_name}
+
+
+@app.get("/api/health", tags=["system"])
 async def health_check():
-    return {"status":"ok","app":settings.app_name,"version":"1.0.0","environment":settings.environment}
+    """Railway healthcheck endpoint. Executes SELECT 1 to verify DB connectivity."""
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception as exc:
+        db_status = f"error: {exc}"
+
+    status_code = 200 if db_status == "ok" else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status":      "ok" if db_status == "ok" else "degraded",
+            "database":    db_status,
+            "app":         settings.app_name,
+            "version":     "1.0.0",
+            "environment": settings.environment,
+        },
+    )
 
 if STATIC_DIR.exists():
     _assets = STATIC_DIR / "assets"

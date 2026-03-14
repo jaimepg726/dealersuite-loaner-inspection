@@ -1,30 +1,26 @@
-"""DealerSuite - Storage package
-Factory function returns the best available backend.
-All upload flows use get_storage_backend() - never call Drive directly.
+"""DealerSuite - Storage package (Direct-to-Drive architecture)
+
+Media uploads now go directly from the browser to Google Drive.
+The backend only handles:
+  - Generating resumable upload session URLs (create_resumable_upload_session)
+  - Saving file metadata after browser uploads (save_media_metadata route)
+
+Helper exports retained for utility functions used elsewhere.
 """
-from storage.base import StorageBackend, UploadResult
-from storage.local_backend import LocalStorageBackend
-from storage.drive_backend import GoogleDriveBackend, build_filename, sanitize_loaner_number
-
-
-async def get_storage_backend(db_session=None) -> StorageBackend:
-    """
-    Return GoogleDriveBackend if OAuth tokens are configured and valid.
-    Fall back to LocalStorageBackend if Drive is unavailable.
-    """
-    if db_session is not None:
-        drive = GoogleDriveBackend(db_session)
-        if await drive.is_available():
-            return drive
-    return LocalStorageBackend()
-
+from storage.drive_backend import (
+    build_filename,
+    sanitize_loaner_number,
+    get_valid_access_token,
+    ensure_folders,
+    create_resumable_upload_session,
+    set_file_public,
+)
 
 __all__ = [
-    "StorageBackend",
-    "UploadResult",
-    "LocalStorageBackend",
-    "GoogleDriveBackend",
-    "get_storage_backend",
     "build_filename",
     "sanitize_loaner_number",
+    "get_valid_access_token",
+    "ensure_folders",
+    "create_resumable_upload_session",
+    "set_file_public",
 ]
