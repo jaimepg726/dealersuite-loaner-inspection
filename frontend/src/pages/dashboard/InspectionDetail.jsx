@@ -1,101 +1,177 @@
 /**
- * DealerSuite â Inspection Detail Page
- * Displays vehicle info, loaner number, inspector, damage notes, and media gallery.
- * Accessed from InspectionsPage when a card is tapped.
+ * DealerSuite - Inspection Detail Page
+ * Media components updated to fetch Drive files directly from Google,
+ * bypassing Railway entirely. Uses createObjectURL so <img>/<video> work
+ * with authenticated Drive API requests.
  */
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Video, AlertTriangle, X, Loader } from 'lucide-react'
+import { ArrowLeft, Camera, Video, AlertTriangle, X, Loader, WifiOff } from 'lucide-react'
 import api from '../../utils/api'
 
-/** Extract the file ID from any Google Drive URL format. */
+/** Returns true if URL points to Google Drive */
+function isDriveUrl(url) {
+  return url && url.includes('drive.google.com')
+}
+
+/** Extract Drive file ID from any Drive URL format */
 function extractDriveFileId(url) {
   if (!url) return null
-  // /file/d/FILE_ID/ pattern
   const m1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
   if (m1) return m1[1]
-  // uc?id=FILE_ID or uc?export=view&id=FILE_ID patterns
   const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
   if (m2) return m2[1]
   return null
 }
 
 /**
- * Convert any Google Drive URL to a direct embeddable URL.
- * Output: https://drive.google.com/uc?id=FILE_ID&export=view
+ * Fetch a Drive-backed media record directly from Google.
+ * 1. GET /api/media/{id}/drive-token  (Railway — tiny JSON, no bytes)
+ * 2. fetch(drive_url, Authorization header)  (browser → Google directly)
+ * 3. createObjectURL(blob)
+ * Railway never touches the media bytes.
  */
-function toDriveViewUrl(url) {
-  if (!url) return url
-  // Already a direct uc link â return as-is
-  if (url.includes('drive.google.com/uc')) return url
-  const fileId = extractDriveFileId(url)
-  if (fileId) return `https://drive.google.com/uc?id=${fileId}&export=view`
-  return url
+async function fetchDriveBlob(mediaId) {
+  const { data } = await api.get(`/api/media/${mediaId}/drive-token`)
+  // Use raw fetch — NOT the api instance — so we don't send the DealerSuite
+  // JWT to Google and don't prepend the Railway base URL.
+  const resp = await fetch(data.drive_url, {
+    headers: { Authorization: `Bearer ${data.access_token}` }
+  })
+  if (!resp.ok) throw new Error(`Drive fetch failed: ${resp.status}`)
+  const blob = await resp.blob()
+  return { objectUrl: URL.createObjectURL(blob), mimeType: data.mime_type }
 }
 
-/** Return a Drive thumbnail URL for video poster images. */
-function toDriveThumbnailUrl(url) {
-  const fileId = extractDriveFileId(url)
-  if (!fileId) return undefined
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`
-}
-
-/** Single photo thumbnail with loading spinner and DB fallback on error. */
+/** Single photo thumbnail — Drive or legacy DB */
 function PhotoThumb({ m, onOpen }) {
+  const [src, setSrc] = useState(null)
   const [loading, setLoading] = useState(true)
-  const imgRef = useRef(null)
+  const [error, setError] = useState(false)
+  const objUrlRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(false)
+    setSrc(null)
+
+    if (isDriveUrl(m.file_url)) {
+      fetchDriveBlob(m.id)
+        .then(({ objectUrl }) => {
+          if (cancelled) { URL.revokeObjectURL(objectUrl); return }
+          objUrlRef.current = objectUrl
+          setSrc(objectUrl)
+          setLoading(false)
+        })
+        .catch(() => {
+          if (!cancelled) { setError(true); setLoading(false) }
+        })
+    } else {
+      // Legacy DB record — plain src, no auth needed
+      setSrc(m.file_url)
+      setLoading(false)
+    }
+
+    return () => {
+      cancelled = true
+      if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null }
+    }
+  }, [m.id, m.file_url])
 
   return (
     <button
-      onClick={() => onOpen(imgRef.current?.src || toDriveViewUrl(m.file_url))}
-      className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
-                 hover:border-brand-blue/60 transition-colors relative"
+      onClick={() => src && onOpen(src)}
+      className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent hover:border-brand-blue/60 transition-colors relative"
     >
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
           <Loader className="w-5 h-5 text-brand-blue animate-spin" />
         </div>
       )}
-      <img
-        ref={imgRef}
-        src={toDriveViewUrl(m.file_url)}
-        alt="Inspection photo"
-        className="w-full h-full object-cover"
-        loading="lazy"
-        onLoad={() => setLoading(false)}
-        onError={(e) => { e.target.onerror = null; e.target.src = `/api/media/${m.id}` }}
-      />
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
+          <WifiOff className="w-5 h-5 text-gray-500" />
+        </div>
+      )}
+      {src && !error && (
+        <img
+          src={src}
+          alt="Inspection photo"
+          className="w-full h-full object-cover"
+          onLoad={() => setLoading(false)}
+        />
+      )}
     </button>
   )
 }
 
-/** Single video player with loading spinner, poster thumbnail, and DB fallback on error. */
+/** Single video player — Drive or legacy DB */
 function VideoPlayer({ m }) {
+  const [src, setSrc] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const objUrlRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(false)
+    setSrc(null)
+
+    if (isDriveUrl(m.file_url)) {
+      fetchDriveBlob(m.id)
+        .then(({ objectUrl }) => {
+          if (cancelled) { URL.revokeObjectURL(objectUrl); return }
+          objUrlRef.current = objectUrl
+          setSrc(objectUrl)
+          setLoading(false)
+        })
+        .catch(() => {
+          if (!cancelled) { setError(true); setLoading(false) }
+        })
+    } else {
+      setSrc(m.file_url)
+      setLoading(false)
+    }
+
+    return () => {
+      cancelled = true
+      if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null }
+    }
+  }, [m.id, m.file_url])
 
   return (
     <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid z-10">
-          <Loader className="w-6 h-6 text-brand-blue animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid z-10 min-h-32">
+          <div className="flex flex-col items-center gap-2">
+            <Loader className="w-6 h-6 text-brand-blue animate-spin" />
+            <span className="text-xs text-gray-500">Loading video…</span>
+          </div>
         </div>
       )}
-      <video
-        src={toDriveViewUrl(m.file_url)}
-        poster={toDriveThumbnailUrl(m.file_url)}
-        controls
-        preload="metadata"
-        className="w-full max-h-56 object-contain"
-        onLoadedMetadata={() => setLoading(false)}
-        onError={(e) => { e.target.onerror = null; e.target.src = `/api/media/${m.id}` }}
-      />
+      {error && (
+        <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
+          <WifiOff className="w-5 h-5" />
+          <span className="text-sm">Could not load video</span>
+        </div>
+      )}
+      {src && !error && (
+        <video
+          src={src}
+          controls
+          preload="metadata"
+          className="w-full max-h-56 object-contain"
+          onLoadedMetadata={() => setLoading(false)}
+        />
+      )}
     </div>
   )
 }
 
 function MediaGallery({ media }) {
   const [modalSrc, setModalSrc] = useState(null)
-
   const photos = media.filter((m) => m.media_type === 'photo')
   const videos = media.filter((m) => m.media_type === 'video')
 
@@ -110,7 +186,6 @@ function MediaGallery({ media }) {
 
   return (
     <>
-      {/* Photos */}
       {photos.length > 0 && (
         <div className="mb-4">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
@@ -118,13 +193,11 @@ function MediaGallery({ media }) {
           </p>
           <div className="grid grid-cols-3 gap-2">
             {photos.map((m) => (
-              <PhotoThumb key={m.id} m={m} onOpen={(src) => setModalSrc(src)} />
+              <PhotoThumb key={m.id} m={m} onOpen={(s) => setModalSrc(s)} />
             ))}
           </div>
         </div>
       )}
-
-      {/* Videos */}
       {videos.length > 0 && (
         <div>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
@@ -137,8 +210,6 @@ function MediaGallery({ media }) {
           </div>
         </div>
       )}
-
-      {/* Photo modal */}
       {modalSrc && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
@@ -164,19 +235,18 @@ function MediaGallery({ media }) {
 
 const TYPE_COLOR = {
   Checkout:  'bg-brand-blue/20 text-brand-blue',
-  Checkin:   'bg-green-900/50  text-green-400',
+  Checkin:   'bg-green-900/50 text-green-400',
   Inventory: 'bg-purple-900/50 text-purple-400',
   Sales:     'bg-orange-900/50 text-orange-400',
 }
-
 const STATUS_COLOR = {
-  Completed:    'text-green-400',
+  Completed:   'text-green-400',
   'In Progress':'text-yellow-400',
   Failed:       'text-red-400',
 }
 
 function formatDate(iso) {
-  if (!iso) return 'â'
+  if (!iso) return '—'
   return new Date(iso).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -230,17 +300,15 @@ export default function InspectionDetail() {
   if (!inspection) return null
 
   const { vehicle, damages = [], media = [] } = inspection
-  const typeCls   = TYPE_COLOR[inspection.inspection_type]  || TYPE_COLOR.Checkout
-  const statusCls = STATUS_COLOR[inspection.status]         || 'text-gray-400'
+  const typeCls = TYPE_COLOR[inspection.inspection_type] || TYPE_COLOR.Checkout
+  const statusCls = STATUS_COLOR[inspection.status] || 'text-gray-400'
 
   return (
     <div className="flex flex-col pb-8">
-      {/* Header */}
       <div className="px-5 pt-5 pb-3 flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
-          className="w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl
-                     flex items-center justify-center active:scale-95"
+          className="w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl flex items-center justify-center active:scale-95"
         >
           <ArrowLeft className="w-4 h-4 text-gray-400" />
         </button>
@@ -253,15 +321,13 @@ export default function InspectionDetail() {
       </div>
 
       <div className="px-5 flex flex-col gap-4">
-        {/* Vehicle + inspection meta */}
         <div className="card">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${typeCls}`}>
               {inspection.inspection_type}
             </span>
-            <span className={`text-xs font-semibold ${statusCls}`}>â {inspection.status}</span>
+            <span className={`text-xs font-semibold ${statusCls}`}>● {inspection.status}</span>
           </div>
-
           {vehicle ? (
             <p className="text-brand-white font-bold text-lg leading-tight">
               {vehicle.year} {vehicle.make} {vehicle.model}
@@ -274,13 +340,11 @@ export default function InspectionDetail() {
           ) : (
             <p className="text-gray-500 text-sm">Vehicle #{inspection.vehicle_id}</p>
           )}
-
           {inspection.inspector_name && (
             <p className="text-gray-400 text-sm mt-1">
               Inspector: <span className="text-gray-300">{inspection.inspector_name}</span>
             </p>
           )}
-
           {inspection.notes && (
             <p className="text-gray-400 text-sm mt-2 border-t border-brand-accent pt-2">
               {inspection.notes}
@@ -288,7 +352,6 @@ export default function InspectionDetail() {
           )}
         </div>
 
-        {/* Damage items */}
         {damages.length > 0 && (
           <div>
             <h3 className="text-sm font-bold text-gray-300 mb-2 flex items-center gap-2">
@@ -299,19 +362,14 @@ export default function InspectionDetail() {
               {damages.map((d) => (
                 <div key={d.id} className="card text-sm">
                   <p className="font-semibold text-brand-white">{d.location}</p>
-                  {d.description && (
-                    <p className="text-gray-400 mt-0.5">{d.description}</p>
-                  )}
-                  {d.repair_order && (
-                    <p className="text-gray-500 text-xs mt-1">RO: {d.repair_order}</p>
-                  )}
+                  {d.description && <p className="text-gray-400 mt-0.5">{d.description}</p>}
+                  {d.repair_order && <p className="text-gray-500 text-xs mt-1">RO: {d.repair_order}</p>}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Inspection Media */}
         <div>
           <h3 className="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2">
             <Camera className="w-4 h-4 text-brand-blue" />
