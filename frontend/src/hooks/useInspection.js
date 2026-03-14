@@ -2,8 +2,9 @@
  * useInspection — manages the lifecycle of an active inspection.
  *
  * Upload strategy:
- *  1. Try direct-to-Drive: GET /upload-session -> PUT to Drive resumable URL
- *     -> POST /finalize-upload. Railway only handles tiny JSON — zero bytes.
+ *  1. Try direct-to-Drive: GET /upload-session -> PUT blob directly to Drive
+ *     resumable URL -> POST /finalize-upload with Drive file ID.
+ *     Railway handles only tiny JSON — zero media bytes through Railway.
  *  2. Fall back to legacy /upload (multipart through Railway) if Drive
  *     not connected or session creation fails.
  */
@@ -43,7 +44,7 @@ export default function useInspection() {
     }, POLL_INTERVAL_MS)
   }
 
-  // ── Start ──────────────────────────────────────────────────────────────────
+  // ── Start ────────────────────────────────────────────────────────────────────
   const start = useCallback(async (vehicleId, type) => {
     setStarting(true); setError(null)
     try {
@@ -59,22 +60,23 @@ export default function useInspection() {
     } finally { setStarting(false) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Direct-to-Drive upload ─────────────────────────────────────────────────
+  // ── Direct-to-Drive upload ───────────────────────────────────────────────────
   async function _directDriveUpload(blob, mediaType, damageLocation, inspectionId, onProgress) {
     const mimeType = blob.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg')
     const params = new URLSearchParams({ mime_type: mimeType, media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
 
-    // Step 1: get resumable URL from Railway (tiny JSON request)
+    // Step 1: Get Drive resumable URL from Railway (tiny JSON, no media bytes)
     const { data: session } = await api.post(
       `/api/inspect/${inspectionId}/upload-session?${params}`
     )
 
-    // Step 2: PUT file directly to Google Drive resumable URL.
-    // IMPORTANT: use raw fetch, NOT the api axios instance.
-    // Reasons: (a) must NOT attach DealerSuite JWT to a Google request,
-    //          (b) must NOT prepend Railway base URL to the Google URL.
-    await new Promise((resolve, reject) => {
+    // Step 2: PUT blob directly to Google Drive resumable URL.
+    // Use raw XHR — NOT the api axios instance — for two critical reasons:
+    //   (a) Must NOT attach the DealerSuite JWT to a Google API request
+    //   (b) Must NOT prepend the Railway base URL to the Google URL
+    // Drive returns the file resource JSON (with "id") on 200/201.
+    const driveFileId = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', session.resumable_url)
       xhr.setRequestHeader('Content-Type', mimeType)
@@ -84,27 +86,26 @@ export default function useInspection() {
         }
       }
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText)
-        else reject(new Error(`Drive PUT failed: ${xhr.status} ${xhr.responseText.substring(0, 100)}`))
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const fileResource = JSON.parse(xhr.responseText)
+            if (fileResource.id) { resolve(fileResource.id); return }
+          } catch {}
+          reject(new Error('Drive upload succeeded but could not parse file ID'))
+        } else {
+          reject(new Error(`Drive PUT failed: ${xhr.status}`))
+        }
       }
       xhr.onerror = () => reject(new Error('Drive PUT network error'))
       xhr.send(blob)
     })
 
-    // Step 3: Parse Drive file ID from response or filename, then finalize
-    // Drive returns JSON with id on successful upload
-    let driveFileId = null
-    try {
-      // The resumable URL response body on 200 contains the file resource
-      // We stored the media_record_id in the session — use that to finalize
-    } catch {}
-
-    // Finalize: tell Railway the Drive file ID
+    // Step 3: Tell Railway the Drive file ID (tiny JSON, no media bytes)
     const { data: finalized } = await api.post(
       `/api/inspect/${inspectionId}/finalize-upload`,
       {
         media_record_id: session.media_record_id,
-        drive_file_id: await _getDriveFileId(session.resumable_url),
+        drive_file_id: driveFileId,
         mime_type: mimeType,
         media_type: mediaType,
         file_size: blob.size,
@@ -113,26 +114,7 @@ export default function useInspection() {
     return finalized
   }
 
-  // Extract Drive file ID after upload completes by querying Railway
-  // (Drive resumable URL response body contains the file resource JSON)
-  async function _getDriveFileId(resumableUrl) {
-    // The PUT response body IS the Drive file resource JSON with the id
-    // We capture it via XHR above but need to restructure — use a simpler approach:
-    // do a zero-byte PUT to get the final file resource
-    try {
-      const r = await fetch(resumableUrl, {
-        method: 'PUT',
-        headers: { 'Content-Range': '*/*' },
-      })
-      if (r.status === 200 || r.status === 201) {
-        const d = await r.json()
-        return d.id
-      }
-    } catch {}
-    return null
-  }
-
-  // ── Legacy upload (Railway proxy fallback) ─────────────────────────────────
+  // ── Legacy upload (Railway proxy — fallback when Drive not connected) ─────────
   async function _legacyUpload(blob, mediaType, damageLocation, inspectionId, onProgress) {
     const form = new FormData()
     const ext = mediaType === 'video' ? 'mp4' : 'jpg'
@@ -152,7 +134,7 @@ export default function useInspection() {
     return data
   }
 
-  // ── uploadFile — tries direct Drive, falls back to legacy ──────────────────
+  // ── uploadFile — direct Drive first, legacy fallback ─────────────────────────
   const uploadFile = useCallback(async (blob, mediaType, damageLocation = null) => {
     if (!inspection?.id) throw new Error('No active inspection')
     setUploading(true); setUploadPct(0); setError(null)
@@ -160,15 +142,14 @@ export default function useInspection() {
     try {
       let result
       try {
-        // Attempt direct-to-Drive upload (zero Railway bandwidth)
         result = await _directDriveUpload(
           blob, mediaType, damageLocation, inspection.id,
           (pct) => setUploadPct(pct)
         )
       } catch (directErr) {
-        console.warn('Direct Drive upload failed, falling back to legacy:', directErr.message)
+        // Drive not connected or session failed — fall back to legacy
+        console.warn('Direct Drive upload failed, falling back to Railway proxy:', directErr.message)
         setUploadPct(0)
-        // Fallback: send through Railway (Drive not connected or session failed)
         result = await _legacyUpload(
           blob, mediaType, damageLocation, inspection.id,
           (pct) => setUploadPct(pct)
@@ -184,7 +165,7 @@ export default function useInspection() {
     } finally { setUploading(false); setUploadPct(0) }
   }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Complete ───────────────────────────────────────────────────────────────
+  // ── Complete ──────────────────────────────────────────────────────────────────
   const complete = useCallback(async (photoCount = 0, notes = null) => {
     if (!inspection?.id) throw new Error('No active inspection')
     setError(null)
@@ -199,7 +180,7 @@ export default function useInspection() {
     }
   }, [inspection])
 
-  // ── Reset ──────────────────────────────────────────────────────────────────
+  // ── Reset ─────────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     clearPoll()
     setInspection(null); setStarting(false); setUploading(false)
