@@ -21,4 +21,4 @@ python seed.py
 echo "      Seed complete."
 
 echo "[3/3] Starting gunicorn (1 worker)..."
-exec gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind "0.0.0.0:${PORT:-8000}"
+exec gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind "0.0.0.0:${PORT:-8000}" --timeout 60 --worker-tmp-dir /dev/shm

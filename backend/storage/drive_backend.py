@@ -84,7 +84,8 @@ async def get_valid_access_token(db) -> Optional[str]:
                 pass
 
         now = datetime.now(timezone.utc)
-        near_expiry  = expiry is not None and (expiry - now) < timedelta(minutes=5)
+        # Refresh if the token expires within the next 60 seconds
+        near_expiry   = expiry is not None and (expiry - now) < timedelta(seconds=60)
         token_expired = expiry is not None and expiry <= now
 
         if token_expired and not refresh_token:

@@ -65,8 +65,9 @@ class MediaMetadata(BaseModel):
     drive_file_id: str
     file_url:      str
     filename:      str
-    media_type:    str        # "photo" | "video"
+    media_type:    str          # "photo" | "video"
     mime_type:     str | None = None
+    file_size:     int | None = None   # bytes, sent by browser after upload
     damage_location: str | None = None
 
 
@@ -232,8 +233,11 @@ async def save_media_metadata(
         inspection_id=inspection_id,
         file_url=body.file_url,
         drive_file_id=body.drive_file_id,
+        drive_url=body.file_url,
         media_type=body.media_type,
         mime_type=content_type,
+        file_size=body.file_size,
+        uploaded_at=_utcnow(),
         created_at=_utcnow(),
     )
     db.add(record)

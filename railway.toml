@@ -20,7 +20,7 @@ builder        = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand           = "gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+startCommand           = "gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 60 --worker-tmp-dir /dev/shm"
 healthcheckPath        = "/api/health"
 healthcheckTimeout     = 300
 restartPolicyType      = "ON_FAILURE"

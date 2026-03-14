@@ -48,4 +48,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # Single worker preserves RAM. Railway overrides via startCommand in railway.toml.
-CMD ["sh", "-c", "gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000}"]
+CMD ["sh", "-c", "gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 60 --worker-tmp-dir /dev/shm"]

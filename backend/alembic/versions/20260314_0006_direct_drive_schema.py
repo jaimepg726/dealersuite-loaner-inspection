@@ -1,4 +1,5 @@
-"""Direct-to-Drive architecture: remove BYTEA storage, add indexes, add drive_file_id
+"""Direct-to-Drive architecture: add new Drive fields + indexes.
+NOTE: file_data (BYTEA) is intentionally NOT dropped — legacy records need backfilling.
 
 Revision ID: 0006
 Revises: 0005
@@ -14,39 +15,21 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── Add missing index on inspections.started_at for date-range queries ──
-    op.create_index(
-        'ix_inspections_started_at',
-        'inspections',
-        ['started_at'],
-    )
+    # ── New Direct-to-Drive columns on inspection_media ─────────────────────
+    op.add_column('inspection_media', sa.Column('drive_file_id', sa.String(200), nullable=True))
+    op.add_column('inspection_media', sa.Column('drive_url',     sa.String(500), nullable=True))
+    op.add_column('inspection_media', sa.Column('file_size',     sa.Integer(),   nullable=True))
+    op.add_column('inspection_media', sa.Column('uploaded_at',   sa.DateTime(timezone=True), nullable=True))
 
-    # ── Add drive_file_id to inspection_media (VARCHAR replaces BYTEA) ──────
-    op.add_column(
-        'inspection_media',
-        sa.Column('drive_file_id', sa.String(200), nullable=True),
-    )
-
-    # ── Drop the BYTEA file_data column (was storing raw media in Postgres) ─
-    # Use IF EXISTS guard via raw SQL so the migration is idempotent on DBs
-    # that were already migrated manually.
-    op.execute(
-        "ALTER TABLE inspection_media DROP COLUMN IF EXISTS file_data"
-    )
-
-    # ── Add index on inspection_media.created_at ────────────────────────────
-    op.create_index(
-        'ix_inspection_media_created_at',
-        'inspection_media',
-        ['created_at'],
-    )
+    # ── Indexes for common query patterns ────────────────────────────────────
+    op.create_index('ix_inspection_media_created_at', 'inspection_media', ['created_at'])
+    op.create_index('ix_inspections_started_at',      'inspections',      ['started_at'])
 
 
 def downgrade() -> None:
+    op.drop_index('ix_inspections_started_at',      table_name='inspections')
     op.drop_index('ix_inspection_media_created_at', table_name='inspection_media')
-    op.add_column(
-        'inspection_media',
-        sa.Column('file_data', sa.LargeBinary(), nullable=True),
-    )
+    op.drop_column('inspection_media', 'uploaded_at')
+    op.drop_column('inspection_media', 'file_size')
+    op.drop_column('inspection_media', 'drive_url')
     op.drop_column('inspection_media', 'drive_file_id')
-    op.drop_index('ix_inspections_started_at', table_name='inspections')

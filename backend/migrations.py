@@ -1,6 +1,9 @@
 """DealerSuite — Lightweight startup migrations
 Runs idempotent DDL for any columns/indexes that don't exist yet.
 Safe to run on every startup — errors from already-existing objects are swallowed.
+
+NOTE: file_data (BYTEA) is intentionally preserved for legacy record backfilling.
+      It is NOT dropped here.
 """
 import logging
 from sqlalchemy import text
@@ -14,9 +17,13 @@ _COLUMN_MIGRATIONS = [
     ("loaners",          "is_demo",        "BOOLEAN DEFAULT false"),
     ("vehicles",         "is_demo",        "BOOLEAN DEFAULT false"),
     ("vehicles",         "fuel_level",     "VARCHAR(10)"),
+    # inspection_media legacy + new Direct-to-Drive columns
     ("inspection_media", "mime_type",      "VARCHAR(50)"),
     ("inspection_media", "file_hash",      "VARCHAR(64)"),
     ("inspection_media", "drive_file_id",  "VARCHAR(200)"),
+    ("inspection_media", "drive_url",      "VARCHAR(500)"),
+    ("inspection_media", "file_size",      "INTEGER"),
+    ("inspection_media", "uploaded_at",    "TIMESTAMPTZ"),
 ]
 
 # CREATE INDEX IF NOT EXISTS migrations: (index_name, table, column)
@@ -39,11 +46,6 @@ _CREATE_TABLES = [
     """,
 ]
 
-# Drop the BYTEA column if it still exists (direct-to-Drive migration)
-_DROP_COLUMNS = [
-    "ALTER TABLE inspection_media DROP COLUMN IF EXISTS file_data",
-]
-
 
 async def run_migrations(engine: AsyncEngine) -> None:
     ddl_statements = []
@@ -55,9 +57,6 @@ async def run_migrations(engine: AsyncEngine) -> None:
         ddl_statements.append(
             f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"
         )
-
-    for ddl in _DROP_COLUMNS:
-        ddl_statements.append(ddl)
 
     for index_name, table, column in _INDEX_MIGRATIONS:
         ddl_statements.append(
