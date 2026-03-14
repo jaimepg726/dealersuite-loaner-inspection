@@ -1,34 +1,35 @@
 #!/bin/sh
-# ── DealerSuite Loaner Inspection — Container startup script ───────────────────
-#
-# Order of operations:
-#   0. Wait for Postgres to be ready (handles Railway recovery mode)
-#   1. Run Alembic migrations (idempotent — safe on every deploy)
-#   2. Seed the default admin + manager accounts (skips if they already exist)
-#   3. Start the FastAPI/uvicorn server
+# DealerSuite Loaner Inspection — Container startup
+# 0. Wait for Postgres (up to 5 min — handles Railway recovery mode)
+# 1. Run Alembic migrations
+# 2. Seed default users
+# 3. Start uvicorn
 
 set -e
 
 echo "=== DealerSuite Loaner Inspection — startup ==="
 
-echo "[0/3] Waiting for Postgres..."
-MAX_TRIES=15
+echo "[0/3] Waiting for Postgres (max 5 min)..."
+MAX_TRIES=60
 TRIES=0
 until python -c "
 import os, psycopg2, sys
+url = os.environ.get('DATABASE_URL','')
+url = url.replace('+asyncpg','').replace('postgresql+psycopg2','postgresql')
 try:
-    psycopg2.connect(os.environ['DATABASE_URL'].replace('+asyncpg','').replace('postgresql+psycopg2','postgresql'))
+    conn = psycopg2.connect(url)
+    conn.close()
     print('DB ready')
 except Exception as e:
-    print('DB not ready:', e)
+    print('Not ready:', e)
     sys.exit(1)
 " 2>&1; do
   TRIES=$((TRIES+1))
   if [ "$TRIES" -ge "$MAX_TRIES" ]; then
-    echo "ERROR: Postgres never became ready after $MAX_TRIES attempts. Aborting."
+    echo "ERROR: Postgres not ready after $MAX_TRIES attempts. Aborting."
     exit 1
   fi
-  echo "  Retrying in 5s... (attempt $TRIES/$MAX_TRIES)"
+  echo "  Waiting 5s... (attempt $TRIES/$MAX_TRIES)"
   sleep 5
 done
 echo " Postgres ready."
