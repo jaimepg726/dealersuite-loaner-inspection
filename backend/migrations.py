@@ -1,7 +1,6 @@
-"""DealerSuite — Lightweight startup migrations
+"""DealerSuite - Lightweight startup migrations
 Runs ALTER TABLE ... ADD COLUMN for any columns that don't exist yet.
-Safe to run on every startup — errors from already-existing columns are swallowed.
-Also wipes stale BYTEA blobs to reclaim disk space.
+Safe to run on every startup.
 """
 import logging
 from sqlalchemy import text
@@ -30,6 +29,7 @@ _CREATE_TABLES = [
     """,
 ]
 
+
 async def run_migrations(engine: AsyncEngine) -> None:
     ddl_statements = []
     for ddl in _CREATE_TABLES:
@@ -48,9 +48,8 @@ async def run_migrations(engine: AsyncEngine) -> None:
             logger.warning("Migration skipped: %s", exc)
 
     # ── BYTEA WIPE ────────────────────────────────────────────────────────────
-    # Null out file_data on rows that already have a Drive URL — data is safe
-    # on Drive and still served via /api/media fallback. This reclaims the bulk
-    # of the 500MB Postgres volume (inspection videos stored as BYTEA).
+    # Null out file_data on rows that already have a Drive URL.
+    # Media is safely stored on Drive and served via /drive-token endpoint.
     # Idempotent — rows already NULL are unaffected.
     _WIPE_BYTEA = """
         UPDATE inspection_media
@@ -62,22 +61,18 @@ async def run_migrations(engine: AsyncEngine) -> None:
         async with engine.begin() as conn:
             result = await conn.execute(text(_WIPE_BYTEA))
             if result.rowcount:
-                logger.info(
-                    "BYTEA wipe: freed %d Drive-backed rows from inspection_media",
-                    result.rowcount
-                )
+                logger.info("BYTEA wipe: freed %d Drive-backed rows", result.rowcount)
     except Exception as exc:
         logger.warning("BYTEA wipe skipped: %s", exc)
 
     # ── STALE RECORD CLEANUP ──────────────────────────────────────────────────
-    # Remove rows with /tmp paths, null file_data, or tiny blobs (< 100 bytes)
+    # ONLY remove records with /tmp paths or blank URLs — never touch Drive URLs.
+    # Previous version incorrectly deleted Drive-backed records. Fixed here.
     _CLEANUP = """
         DELETE FROM inspection_media
-        WHERE file_url NOT LIKE '/api/media/%'
-        AND file_url NOT LIKE '%drive.google.com%'
-        OR (file_data IS NULL AND file_url NOT LIKE '%drive.google.com%'
-            AND file_url NOT LIKE '/api/media/%')
-        OR length(file_data) < 100
+        WHERE file_url IS NULL
+        OR file_url = ''
+        OR file_url LIKE '/tmp/%'
     """
     try:
         async with engine.begin() as conn:
