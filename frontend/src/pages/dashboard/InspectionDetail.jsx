@@ -3,7 +3,7 @@
  * Displays vehicle info, loaner number, inspector, damage notes, and media gallery.
  * Accessed from InspectionsPage when a card is tapped.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Video, AlertTriangle, X, Loader } from 'lucide-react'
 import api from '../../utils/api'
@@ -40,14 +40,79 @@ function toDriveThumbnailUrl(url) {
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`
 }
 
-/** Single photo thumbnail with loading spinner and DB fallback on error. */
+/**
+ * Fetch a media item from the backend and return a local object URL.
+ *
+ * The backend returns one of two shapes:
+ *   • A byte stream  (content-type: image/* or video/*)  — legacy BYTEA record.
+ *   • A JSON object  { direct_fetch: true, access_token, drive_url, mime_type }
+ *     — Drive-backed record; we must re-fetch the bytes from Drive ourselves.
+ *
+ * We request responseType:'blob' so axios always gives us a Blob, then inspect
+ * the content-type header to decide which path to take.
+ *
+ * Returns a blob: object URL string, or null on failure.
+ * The CALLER is responsible for calling URL.revokeObjectURL when done.
+ */
+async function fetchMediaObjectUrl(mediaId) {
+  const response = await api.get(`/api/media/${mediaId}`, { responseType: 'blob' })
+  const contentType = response.headers['content-type'] || ''
+
+  if (contentType.startsWith('image/') || contentType.startsWith('video/')) {
+    // Legacy path — backend streamed the bytes directly
+    return URL.createObjectURL(response.data)
+  }
+
+  // Drive path — parse JSON from the blob, then fetch bytes from Drive
+  const text = await response.data.text()
+  const data = JSON.parse(text)
+  if (!data.direct_fetch) throw new Error('Unexpected media response shape')
+
+  const driveResp = await fetch(data.drive_url, {
+    headers: { Authorization: `Bearer ${data.access_token}` },
+  })
+  if (!driveResp.ok) throw new Error(`Drive fetch failed: ${driveResp.status}`)
+
+  const blob = await driveResp.blob()
+  return URL.createObjectURL(blob)
+}
+
+/** Single photo thumbnail — fetches via authenticated API, displays as object URL. */
 function PhotoThumb({ m, onOpen }) {
   const [loading, setLoading] = useState(true)
-  const imgRef = useRef(null)
+  const [objectUrl, setObjectUrl] = useState(null)
+  const [fetchError, setFetchError] = useState(false)
+
+  useEffect(() => {
+    let currentUrl = null
+    let cancelled = false
+
+    fetchMediaObjectUrl(m.id)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        currentUrl = url
+        setObjectUrl(url)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoading(false)
+          setFetchError(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      if (currentUrl) URL.revokeObjectURL(currentUrl)
+    }
+  }, [m.id])
 
   return (
     <button
-      onClick={() => onOpen(imgRef.current?.src || toDriveViewUrl(m.file_url))}
+      onClick={() => objectUrl && onOpen(objectUrl)}
       className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
                  hover:border-brand-blue/60 transition-colors relative"
     >
@@ -56,22 +121,54 @@ function PhotoThumb({ m, onOpen }) {
           <Loader className="w-5 h-5 text-brand-blue animate-spin" />
         </div>
       )}
-      <img
-        ref={imgRef}
-        src={toDriveViewUrl(m.file_url)}
-        alt="Inspection photo"
-        className="w-full h-full object-cover"
-        loading="lazy"
-        onLoad={() => setLoading(false)}
-        onError={(e) => { e.target.onerror = null; e.target.src = `/api/media/${m.id}` }}
-      />
+      {fetchError && !loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
+          <Camera className="w-5 h-5 text-gray-500" />
+        </div>
+      )}
+      {objectUrl && (
+        <img
+          src={objectUrl}
+          alt="Inspection photo"
+          className="w-full h-full object-cover"
+        />
+      )}
     </button>
   )
 }
 
-/** Single video player with loading spinner, poster thumbnail, and DB fallback on error. */
+/** Single video player — fetches via authenticated API, plays from object URL. */
 function VideoPlayer({ m }) {
   const [loading, setLoading] = useState(true)
+  const [objectUrl, setObjectUrl] = useState(null)
+  const [fetchError, setFetchError] = useState(false)
+
+  useEffect(() => {
+    let currentUrl = null
+    let cancelled = false
+
+    fetchMediaObjectUrl(m.id)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        currentUrl = url
+        setObjectUrl(url)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoading(false)
+          setFetchError(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      if (currentUrl) URL.revokeObjectURL(currentUrl)
+    }
+  }, [m.id])
 
   return (
     <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative">
@@ -80,15 +177,19 @@ function VideoPlayer({ m }) {
           <Loader className="w-6 h-6 text-brand-blue animate-spin" />
         </div>
       )}
-      <video
-        src={toDriveViewUrl(m.file_url)}
-        poster={toDriveThumbnailUrl(m.file_url)}
-        controls
-        preload="metadata"
-        className="w-full max-h-56 object-contain"
-        onLoadedMetadata={() => setLoading(false)}
-        onError={(e) => { e.target.onerror = null; e.target.src = `/api/media/${m.id}` }}
-      />
+      {fetchError && !loading && (
+        <div className="flex items-center justify-center py-8 text-gray-500 text-sm gap-2">
+          <Video className="w-5 h-5" /> Video unavailable
+        </div>
+      )}
+      {objectUrl && (
+        <video
+          src={objectUrl}
+          controls
+          preload="metadata"
+          className="w-full max-h-56 object-contain"
+        />
+      )}
     </div>
   )
 }
