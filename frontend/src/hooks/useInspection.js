@@ -77,6 +77,14 @@ export default function useInspection() {
     //   (a) Must NOT attach the DealerSuite JWT to a Google API request
     //   (b) Must NOT prepend the Railway base URL to the Google URL
     // Drive returns the file resource JSON (with "id") on 200/201.
+
+    // Backend idempotency sentinel: empty resumable_url means a video session
+    // for this inspection was already created within the last 30s.
+    // Skip the PUT entirely — the first upload is already in progress.
+    if (!session.resumable_url) {
+      return { file_id: String(session.media_record_id), file_url: '', backend: 'skipped-duplicate' }
+    }
+
     const driveFileId = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', session.resumable_url)

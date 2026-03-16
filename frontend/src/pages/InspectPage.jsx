@@ -75,9 +75,10 @@ export default function InspectPage() {
   const [uploadError, setUploadError] = useState(null)
 
   // Media captured during recording â held in refs to avoid stale closures
-  const videoBlobRef  = useRef(null)
-  const photoBlobsRef = useRef([])  // still frames taken during walkround
-  const damagesRef    = useRef([])  // DamageLogger output
+  const videoBlobRef       = useRef(null)
+  const photoBlobsRef      = useRef([])    // still frames taken during walkround
+  const damagesRef         = useRef([])    // DamageLogger output
+  const uploadsStartedRef  = useRef(false) // guard against double-trigger
 
   // ââ Start inspection on mount âââââââââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
@@ -108,6 +109,9 @@ export default function InspectPage() {
 
   // ââ Upload orchestration ââââââââââââââââââââââââââââââââââââââââââââââââââ
   async function kickOffUploads(damages) {
+    if (uploadsStartedRef.current) return
+    uploadsStartedRef.current = true
+
     const videoBlob   = videoBlobRef.current
     const photoDmg    = damages.filter(d => d.photoBlob)
     const photoCount  = photoDmg.length

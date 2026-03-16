@@ -182,6 +182,36 @@ async def create_upload_session(
     if not resumable_url:
         raise HTTPException(status_code=502, detail="Drive did not return a resumable URL")
 
+    # Idempotency guard — if a video session was already created in the last 30s
+    # for this inspection, return the existing pending record instead of opening
+    # a second Drive resumable session (prevents duplicate uploads on double-trigger).
+    if media_type == "video":
+        from datetime import timedelta
+        cutoff = _utcnow() - timedelta(seconds=30)
+        dup_result = await db.execute(
+            select(InspectionMedia).where(
+                InspectionMedia.inspection_id == inspection_id,
+                InspectionMedia.media_type == "video",
+                InspectionMedia.file_url == "pending",
+                InspectionMedia.created_at >= cutoff,
+            )
+        )
+        existing_pending = dup_result.scalars().first()
+        if existing_pending:
+            logger.warning(
+                "upload-session: duplicate video request for inspection %d "
+                "within 30s — returning existing media record %d",
+                inspection_id, existing_pending.id,
+            )
+            # Re-use the same resumable URL is not possible (Drive URLs are one-time),
+            # so we return a sentinel that tells the frontend to skip the PUT and go
+            # straight to finalize using the pre-existing record ID.
+            return UploadSessionResponse(
+                resumable_url="",
+                filename=filename,
+                media_record_id=existing_pending.id,
+            )
+
     # Pre-create the media record so we have an ID to return
     # file_url is a placeholder — updated in /finalize-upload
     record = InspectionMedia(
