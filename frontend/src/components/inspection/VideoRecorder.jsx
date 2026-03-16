@@ -33,8 +33,10 @@ export default function VideoRecorder({ onComplete }) {
   const [capturedPhotos, setCapturedPhotos]  = useState([])  // Blobs from in-recording snapshots
   const [videoBlob,      setVideoBlob]       = useState(null)
   const [photoFlash,     setPhotoFlash]      = useState(false)  // white flash on capture
+  const [continuing,     setContinuing]      = useState(false)  // true after Continue tapped — disables button
 
-  const photoInputRef = useRef(null)  // for optional extra damage photo
+  const photoInputRef    = useRef(null)  // for optional extra damage photo
+  const continueFiredRef = useRef(false) // synchronous guard — ref so it's immune to closure staleness
 
   // ── Auto-start camera on mount ────────────────────────────────────────────
   useEffect(() => {
@@ -82,6 +84,13 @@ export default function VideoRecorder({ onComplete }) {
   }
 
   function handleContinue() {
+    console.log('VideoRecorder onComplete fired')
+    if (continueFiredRef.current) {
+      console.warn('Duplicate capture prevented — Continue tapped twice')
+      return
+    }
+    continueFiredRef.current = true
+    setContinuing(true)  // visually disable the button immediately
     cam.stopCamera()
     onComplete(videoBlob, capturedPhotos)
   }
@@ -218,7 +227,8 @@ export default function VideoRecorder({ onComplete }) {
           </button>
           <button
             onClick={handleContinue}
-            className="flex-[2] btn-success"
+            disabled={continuing}
+            className="flex-[2] btn-success disabled:opacity-50 disabled:pointer-events-none"
           >
             <CheckCircle className="w-5 h-5" />
             Continue

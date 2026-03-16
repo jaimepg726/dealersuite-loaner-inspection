@@ -75,9 +75,11 @@ export default function InspectPage() {
   const [uploadError, setUploadError] = useState(null)
 
   // Media captured during recording â held in refs to avoid stale closures
-  const videoBlobRef  = useRef(null)
-  const photoBlobsRef = useRef([])  // still frames taken during walkround
-  const damagesRef    = useRef([])  // DamageLogger output
+  const videoBlobRef       = useRef(null)
+  const photoBlobsRef      = useRef([])    // still frames taken during walkround
+  const damagesRef         = useRef([])    // DamageLogger output
+  const uploadsStartedRef   = useRef(false) // guard against kickOffUploads double-trigger
+  const videoCaptureLockRef = useRef(false) // guard against VideoRecorder onComplete firing twice
 
   // ââ Start inspection on mount âââââââââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
@@ -91,6 +93,12 @@ export default function InspectPage() {
   // ââ Transitions âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   function handleVideoComplete(videoBlob, capturedPhotos) {
+    if (videoCaptureLockRef.current) {
+      console.warn('Duplicate capture prevented')
+      return
+    }
+    videoCaptureLockRef.current = true
+    console.info('Video captured:', type + '_' + new Date().toISOString())
     videoBlobRef.current  = videoBlob
     photoBlobsRef.current = capturedPhotos
     setPhase('damage')
@@ -108,7 +116,16 @@ export default function InspectPage() {
 
   // ââ Upload orchestration ââââââââââââââââââââââââââââââââââââââââââââââââââ
   async function kickOffUploads(damages) {
-    const videoBlob   = videoBlobRef.current
+    if (uploadsStartedRef.current) {
+      console.warn('kickOffUploads called twice — ignoring duplicate')
+      return
+    }
+    uploadsStartedRef.current = true
+
+    // Only ever one video per inspection — captured once and stored in the ref.
+    // If somehow the ref is null (no recording was completed), skip video upload.
+    const videoBlob = videoBlobRef.current
+    if (videoBlob) console.info('Video added to inspection:', type + '_video')
     const photoDmg    = damages.filter(d => d.photoBlob)
     const photoCount  = photoDmg.length
 

@@ -4,8 +4,9 @@
  * Minimal training required for service drive porters.
  */
 import { useNavigate } from 'react-router-dom'
-import { Camera, LayoutDashboard, Power, Clock } from 'lucide-react'
+import { Camera, LayoutDashboard, Power, Clock, KeyRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import PageHeader from '../components/ui/PageHeader'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -18,40 +19,42 @@ export default function PorterHome() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
+  // Porter session (set by SelectUserPage — separate from JWT auth)
+  const currentUser = (() => {
+    try { return JSON.parse(sessionStorage.getItem('currentUser') || 'null') }
+    catch { return null }
+  })()
+
   async function handleLogout() {
     await logout()
     navigate('/login', { replace: true })
   }
 
+  // Bug 3 fix: enforce user selection before starting an inspection
+  function handleNewInspection() {
+    if (!sessionStorage.getItem('currentUser')) {
+      navigate('/select-user')
+      return
+    }
+    navigate('/scan')
+  }
+
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
 
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-5 pt-8 pb-2">
-        <div>
-          <p className="text-gray-400 text-sm">{getGreeting()},</p>
-          <h1 className="text-2xl font-extrabold text-brand-white leading-tight">
-            {user?.name?.split(' ')[0] || 'Porter'}
-          </h1>
-        </div>
-
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="w-11 h-11 bg-brand-mid border border-brand-accent rounded-xl
-                     flex items-center justify-center active:scale-95 transition-transform"
-          aria-label="Log out"
-        >
-          <Power className="w-5 h-5 text-gray-400" />
-        </button>
-      </header>
+      {/* Bug 2 fix: PageHeader renders the 👤 Name [Switch] chip from sessionStorage */}
+      <PageHeader
+        title={`${getGreeting()}, ${user?.name?.split(' ')[0] || 'Porter'}`}
+        showBack={false}
+        showUserChip={true}
+      />
 
       {/* Main actions */}
       <main className="flex-1 flex flex-col justify-center px-6 gap-4 pb-6">
 
         {/* New Inspection */}
         <button
-          onClick={() => navigate('/scan')}
+          onClick={handleNewInspection}
           className="w-full bg-brand-blue rounded-3xl p-6 flex items-center gap-5
                      shadow-2xl shadow-brand-blue/40 active:scale-95 transition-transform select-none"
         >
@@ -79,12 +82,35 @@ export default function PorterHome() {
           </div>
         </button>
 
+        {/* Change PIN — only visible for advisor / manager sessions */}
+        {currentUser && currentUser.role !== 'porter' && (
+          <button
+            onClick={() => navigate('/change-pin')}
+            className="w-full flex items-center justify-center gap-2 py-4
+                       text-gray-500 text-sm font-semibold
+                       active:text-gray-300 transition-colors select-none"
+          >
+            <KeyRound className="w-4 h-4" />
+            Change PIN
+          </button>
+        )}
+
       </main>
 
-      {/* Shift time indicator */}
-      <footer className="flex items-center justify-center gap-2 pb-10 text-gray-600 text-xs">
-        <Clock className="w-4 h-4" />
-        <span>Shift token valid 8 hours from login</span>
+      {/* Footer: shift info + logout */}
+      <footer className="flex items-center justify-between px-6 pb-10">
+        <div className="flex items-center gap-2 text-gray-600 text-xs">
+          <Clock className="w-4 h-4" />
+          <span>Shift token valid 8 hours from login</span>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="w-10 h-10 bg-brand-mid border border-brand-accent rounded-xl
+                     flex items-center justify-center active:scale-95 transition-transform"
+          aria-label="Log out"
+        >
+          <Power className="w-4 h-4 text-gray-400" />
+        </button>
       </footer>
 
     </div>

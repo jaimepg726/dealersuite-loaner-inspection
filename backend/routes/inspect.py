@@ -182,6 +182,30 @@ async def create_upload_session(
     if not resumable_url:
         raise HTTPException(status_code=502, detail="Drive did not return a resumable URL")
 
+    # Deduplication guard — if any video record (pending OR finalized) was
+    # already created for this inspection in the last 60 seconds, reject the
+    # duplicate request outright so the first upload is not interrupted.
+    if media_type == "video":
+        from datetime import timedelta
+        cutoff = _utcnow() - timedelta(seconds=60)
+        dup_result = await db.execute(
+            select(InspectionMedia).where(
+                InspectionMedia.inspection_id == inspection_id,
+                InspectionMedia.media_type == "video",
+                InspectionMedia.created_at >= cutoff,
+            )
+        )
+        if dup_result.scalars().first():
+            logger.warning(
+                "upload-session: duplicate video request for inspection %d "
+                "within 60s — rejecting to prevent double upload",
+                inspection_id,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="Video upload already in progress for this inspection",
+            )
+
     # Pre-create the media record so we have an ID to return
     # file_url is a placeholder — updated in /finalize-upload
     record = InspectionMedia(

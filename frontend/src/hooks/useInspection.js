@@ -22,6 +22,7 @@ export default function useInspection() {
   const [error, setError] = useState(null)
   const pollRef = useRef(null)
   const uploadInFlightRef = useRef(false)
+  const videoUploadedRef  = useRef(false) // true once a video upload completes for this inspection
 
   function clearPoll() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -67,10 +68,21 @@ export default function useInspection() {
     const params = new URLSearchParams({ mime_type: mimeType, media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
 
-    // Step 1: Get Drive resumable URL from Railway (tiny JSON, no media bytes)
-    const { data: session } = await api.post(
-      `/api/inspect/${inspectionId}/upload-session?${params}`
-    )
+    // Step 1: Get Drive resumable URL from Railway (tiny JSON, no media bytes).
+    // A 409 response means the backend detected a duplicate video upload within
+    // 60s — return a skipped sentinel so the caller does NOT fall back to the
+    // legacy Railway proxy (which would create a second Drive file anyway).
+    let session
+    try {
+      const { data } = await api.post(`/api/inspect/${inspectionId}/upload-session?${params}`)
+      session = data
+    } catch (err) {
+      if (err.response?.status === 409) {
+        console.warn('upload-session 409: duplicate video upload detected — skipping')
+        return { file_id: null, file_url: '', backend: 'skipped-duplicate' }
+      }
+      throw err  // re-throw anything else so uploadFile can fall back to legacy
+    }
 
     // Step 2: PUT blob directly to Google Drive resumable URL.
     // Use raw XHR — NOT the api axios instance — for two critical reasons:
@@ -148,6 +160,13 @@ export default function useInspection() {
   // ── uploadFile — direct Drive first, legacy fallback ─────────────────────────
   const uploadFile = useCallback(async (blob, mediaType, damageLocation = null) => {
     if (!inspection?.id) throw new Error('No active inspection')
+
+    // One video per inspection lifecycle — drop any duplicate before touching the network.
+    if (mediaType === 'video' && videoUploadedRef.current) {
+      console.warn('Video already uploaded for this inspection — skipping duplicate')
+      return null
+    }
+
     if (uploadInFlightRef.current) {
       console.warn('Upload already in flight — ignoring duplicate call')
       return
@@ -172,6 +191,7 @@ export default function useInspection() {
         )
       }
 
+      if (mediaType === 'video') videoUploadedRef.current = true
       const updated = await fetchInspection(inspection.id)
       setInspection(updated)
       return result
@@ -204,6 +224,8 @@ export default function useInspection() {
     clearPoll()
     setInspection(null); setStarting(false); setUploading(false)
     setUploadPct(0); setError(null)
+    uploadInFlightRef.current = false
+    videoUploadedRef.current  = false
   }, [])
 
   return { inspection, starting, uploading, uploadPct, error, start, uploadFile, complete, reset }
