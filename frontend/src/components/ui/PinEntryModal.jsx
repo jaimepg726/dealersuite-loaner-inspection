@@ -52,7 +52,10 @@ export default function PinEntryModal({ user, onSuccess, onCancel }) {
   }
 
   function checkPin(entered) {
-    if (entered.join('') === user.pin) {
+    // Always read from localStorage so a PIN changed via ChangePinPage takes
+    // effect immediately without re-mounting the modal.
+    const correctPin = localStorage.getItem(`pin_${user.name}`) ?? '0000'
+    if (entered.join('') === correctPin) {
       onSuccess(user)
       return
     }

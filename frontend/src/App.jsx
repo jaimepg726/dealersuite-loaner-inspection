@@ -32,6 +32,7 @@ import PorterHome               from './pages/PorterHome'
 import ScanVINPage              from './pages/ScanVINPage'
 import SelectInspectionTypePage from './pages/SelectInspectionTypePage'
 import SelectUserPage           from './pages/SelectUserPage'
+import ChangePinPage            from './pages/ChangePinPage'
 import InspectPage              from './pages/InspectPage'
 import ManagerLayout            from './pages/ManagerLayout'
 
@@ -57,6 +58,13 @@ export default function App() {
         <Route path="/select-user" element={
           <ProtectedRoute>
             <SelectUserPage />
+          </ProtectedRoute>
+        } />
+
+        {/* ── PIN self-service (advisor / manager only) ────────────────── */}
+        <Route path="/change-pin" element={
+          <ProtectedRoute>
+            <ChangePinPage />
           </ProtectedRoute>
         } />
 

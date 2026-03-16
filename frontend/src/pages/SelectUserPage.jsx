@@ -19,13 +19,20 @@ import { useNavigate } from 'react-router-dom'
 import PinEntryModal from '../components/ui/PinEntryModal'
 
 // ── User roster (move to /api/users endpoint when ready) ─────────────────────
+// PINs default to '0000' — overridden by localStorage key `pin_<name>` if set.
+// Use getStoredPin() everywhere so ChangePinPage changes take effect immediately.
 const USERS = [
   { name: 'John',    role: 'porter'  },
   { name: 'Basilio', role: 'porter'  },
-  { name: 'Ronald',  role: 'advisor', pin: '2451' },
-  { name: 'Octavio', role: 'advisor', pin: '3810' },
-  { name: 'Jaime',   role: 'manager', pin: '9999' },
+  { name: 'Ronald',  role: 'advisor', pin: '0000' },
+  { name: 'Octavio', role: 'advisor', pin: '0000' },
+  { name: 'Jaime',   role: 'manager', pin: '0000' },
 ]
+
+/** Returns the stored PIN for a user, falling back to '0000'. */
+export function getStoredPin(name) {
+  return localStorage.getItem(`pin_${name}`) ?? '0000'
+}
 
 const ROLE_GROUPS = [
   { label: 'PORTERS',  roles: ['porter']  },
@@ -42,7 +49,9 @@ export default function SelectUserPage() {
     if (user.role === 'porter') {
       saveAndContinue(user)
     } else {
-      setPinTarget(user)
+      // Pass the live localStorage PIN so PinEntryModal doesn't need to re-read it,
+      // but PinEntryModal also does its own localStorage lookup as a second source of truth.
+      setPinTarget({ ...user, pin: getStoredPin(user.name) })
     }
   }
 
