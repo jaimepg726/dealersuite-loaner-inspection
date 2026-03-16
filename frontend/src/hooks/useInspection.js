@@ -22,6 +22,7 @@ export default function useInspection() {
   const [error, setError] = useState(null)
   const pollRef = useRef(null)
   const uploadInFlightRef = useRef(false)
+  const videoUploadedRef  = useRef(false) // true once a video upload completes for this inspection
 
   function clearPoll() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -159,6 +160,13 @@ export default function useInspection() {
   // ── uploadFile — direct Drive first, legacy fallback ─────────────────────────
   const uploadFile = useCallback(async (blob, mediaType, damageLocation = null) => {
     if (!inspection?.id) throw new Error('No active inspection')
+
+    // One video per inspection lifecycle — drop any duplicate before touching the network.
+    if (mediaType === 'video' && videoUploadedRef.current) {
+      console.warn('Video already uploaded for this inspection — skipping duplicate')
+      return null
+    }
+
     if (uploadInFlightRef.current) {
       console.warn('Upload already in flight — ignoring duplicate call')
       return
@@ -183,6 +191,7 @@ export default function useInspection() {
         )
       }
 
+      if (mediaType === 'video') videoUploadedRef.current = true
       const updated = await fetchInspection(inspection.id)
       setInspection(updated)
       return result
@@ -215,6 +224,8 @@ export default function useInspection() {
     clearPoll()
     setInspection(null); setStarting(false); setUploading(false)
     setUploadPct(0); setError(null)
+    uploadInFlightRef.current = false
+    videoUploadedRef.current  = false
   }, [])
 
   return { inspection, starting, uploading, uploadPct, error, start, uploadFile, complete, reset }
