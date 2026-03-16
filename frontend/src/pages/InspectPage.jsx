@@ -122,7 +122,10 @@ export default function InspectPage() {
     }
     uploadsStartedRef.current = true
 
-    const videoBlob   = videoBlobRef.current
+    // Only ever one video per inspection — captured once and stored in the ref.
+    // If somehow the ref is null (no recording was completed), skip video upload.
+    const videoBlob = videoBlobRef.current
+    if (videoBlob) console.info('Video added to inspection:', type + '_video')
     const photoDmg    = damages.filter(d => d.photoBlob)
     const photoCount  = photoDmg.length
 
