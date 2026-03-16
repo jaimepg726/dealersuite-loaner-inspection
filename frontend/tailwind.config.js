@@ -23,6 +23,16 @@ export default {
       minHeight: {
         touch: '56px',
       },
+      keyframes: {
+        shake: {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '15%, 55%':  { transform: 'translateX(-8px)' },
+          '35%, 75%':  { transform: 'translateX(8px)' },
+        },
+      },
+      animation: {
+        shake: 'shake 0.5s ease-in-out',
+      },
       fontSize: {
         'touch-label': ['1.125rem', { lineHeight: '1.5rem', fontWeight: '600' }],
       },

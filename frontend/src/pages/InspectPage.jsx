@@ -20,12 +20,13 @@ import {
   ExternalLink,
   Home,
 } from 'lucide-react'
-import api            from '../utils/api'
-import PageHeader     from '../components/ui/PageHeader'
-import useInspection  from '../hooks/useInspection'
-import VideoRecorder  from '../components/inspection/VideoRecorder'
-import DamageLogger   from '../components/inspection/DamageLogger'
-import UploadProgress from '../components/inspection/UploadProgress'
+import api                    from '../utils/api'
+import PageHeader              from '../components/ui/PageHeader'
+import useInspection           from '../hooks/useInspection'
+import VideoRecorder           from '../components/inspection/VideoRecorder'
+import DamageLogger            from '../components/inspection/DamageLogger'
+import UploadProgress          from '../components/inspection/UploadProgress'
+import ConnectionStatusBanner  from '../components/ui/ConnectionStatusBanner'
 
 // ââ Type config âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const TYPE_LABELS = {
@@ -62,7 +63,7 @@ export default function InspectPage() {
   const location            = useLocation()
   const navigate            = useNavigate()
 
-  const { inspection, starting, error, start, uploadFile, complete, reset } = useInspection()
+  const { inspection, starting, uploading, error, start, uploadFile, complete, reset } = useInspection()
 
   const vehicle  = location.state?.vehicle ?? null
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
@@ -267,6 +268,19 @@ export default function InspectPage() {
             </div>
           </div>
 
+          {/* Media counts */}
+          {(inspection?.photo_count > 0 || inspection?.video_count > 0) && (
+            <div className="flex items-center gap-4 text-sm font-semibold text-gray-400">
+              {inspection.photo_count > 0 && (
+                <span>📷 {inspection.photo_count} photo{inspection.photo_count !== 1 ? 's' : ''}</span>
+              )}
+              {inspection.video_count > 0 && (
+                <span>🎥 {inspection.video_count} video{inspection.video_count !== 1 ? 's' : ''}</span>
+              )}
+              <span className="text-gray-600">saved to Drive</span>
+            </div>
+          )}
+
           {inspection?.drive_folder_url && (
             <a
               href={inspection.drive_folder_url}
@@ -312,6 +326,7 @@ export default function InspectPage() {
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
+      <ConnectionStatusBanner uploading={uploading} />
       <PageHeader
         title={phaseTitle}
         subtitle={phase === 'recording' ? subtitle : undefined}
