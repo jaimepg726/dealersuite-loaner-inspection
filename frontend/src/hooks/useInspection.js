@@ -67,24 +67,27 @@ export default function useInspection() {
     const params = new URLSearchParams({ mime_type: mimeType, media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
 
-    // Step 1: Get Drive resumable URL from Railway (tiny JSON, no media bytes)
-    const { data: session } = await api.post(
-      `/api/inspect/${inspectionId}/upload-session?${params}`
-    )
+    // Step 1: Get Drive resumable URL from Railway (tiny JSON, no media bytes).
+    // A 409 response means the backend detected a duplicate video upload within
+    // 60s — return a skipped sentinel so the caller does NOT fall back to the
+    // legacy Railway proxy (which would create a second Drive file anyway).
+    let session
+    try {
+      const { data } = await api.post(`/api/inspect/${inspectionId}/upload-session?${params}`)
+      session = data
+    } catch (err) {
+      if (err.response?.status === 409) {
+        console.warn('upload-session 409: duplicate video upload detected — skipping')
+        return { file_id: null, file_url: '', backend: 'skipped-duplicate' }
+      }
+      throw err  // re-throw anything else so uploadFile can fall back to legacy
+    }
 
     // Step 2: PUT blob directly to Google Drive resumable URL.
     // Use raw XHR — NOT the api axios instance — for two critical reasons:
     //   (a) Must NOT attach the DealerSuite JWT to a Google API request
     //   (b) Must NOT prepend the Railway base URL to the Google URL
     // Drive returns the file resource JSON (with "id") on 200/201.
-
-    // Backend idempotency sentinel: empty resumable_url means a video session
-    // for this inspection was already created within the last 30s.
-    // Skip the PUT entirely — the first upload is already in progress.
-    if (!session.resumable_url) {
-      return { file_id: String(session.media_record_id), file_url: '', backend: 'skipped-duplicate' }
-    }
-
     const driveFileId = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', session.resumable_url)

@@ -109,7 +109,10 @@ export default function InspectPage() {
 
   // ââ Upload orchestration ââââââââââââââââââââââââââââââââââââââââââââââââââ
   async function kickOffUploads(damages) {
-    if (uploadsStartedRef.current) return
+    if (uploadsStartedRef.current) {
+      console.warn('kickOffUploads called twice — ignoring duplicate')
+      return
+    }
     uploadsStartedRef.current = true
 
     const videoBlob   = videoBlobRef.current
