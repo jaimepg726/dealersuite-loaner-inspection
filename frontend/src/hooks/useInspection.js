@@ -46,6 +46,19 @@ export default function useInspection() {
     }, POLL_INTERVAL_MS)
   }
 
+  // ── Resume an existing inspection by ID (no new /start call) ────────────────
+  const resume = useCallback(async (id) => {
+    try {
+      const data = await fetchInspection(id)
+      setInspection(data)
+      if (!data.drive_folder_id) startPollingForFolder(data.id)
+      return data
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Could not resume inspection'
+      setError(msg); throw err
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Start ────────────────────────────────────────────────────────────────────
   const start = useCallback(async (vehicleId, type) => {
     setStarting(true); setError(null)
@@ -228,5 +241,5 @@ export default function useInspection() {
     videoUploadedRef.current  = false
   }, [])
 
-  return { inspection, starting, uploading, uploadPct, error, start, uploadFile, complete, reset }
+  return { inspection, starting, uploading, uploadPct, error, start, resume, uploadFile, complete, reset }
 }

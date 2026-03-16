@@ -63,7 +63,7 @@ export default function InspectPage() {
   const location            = useLocation()
   const navigate            = useNavigate()
 
-  const { inspection, starting, uploading, error, start, uploadFile, complete, reset } = useInspection()
+  const { inspection, starting, uploading, error, start, resume, uploadFile, complete, reset } = useInspection()
 
   const vehicle  = location.state?.vehicle ?? null
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
@@ -82,12 +82,42 @@ export default function InspectPage() {
   const videoCaptureLockRef = useRef(false) // guard against VideoRecorder onComplete firing twice
 
   // ââ Start inspection on mount âââââââââââââââââââââââââââââââââââââââââââââ
+  // Guards against duplicate /start calls if the component remounts for the
+  // same vehicle+type (e.g. iPad Safari navigation glitch).
+  // A separate /start call creates a second inspection ID, bypassing all other
+  // dedup guards since they operate on a per-instance basis.
   useEffect(() => {
     if (!vehicleId) return
-    start(Number(vehicleId), apiType)
-      .then(() => setPhase('recording'))
-      .catch(() => setPhase('error'))
-    return () => reset()
+    const sessionKey = `inspection_${vehicleId}_${apiType}`
+    const existingId = sessionStorage.getItem(sessionKey)
+
+    if (existingId) {
+      console.info(`Resuming existing inspection ${existingId} for vehicle ${vehicleId}`)
+      resume(Number(existingId))
+        .then(() => setPhase('recording'))
+        .catch(() => {
+          // Stale or deleted inspection — clear the key and start fresh
+          console.warn(`Could not resume inspection ${existingId} — starting fresh`)
+          sessionStorage.removeItem(sessionKey)
+          startFresh()
+        })
+    } else {
+      startFresh()
+    }
+
+    function startFresh() {
+      start(Number(vehicleId), apiType)
+        .then(data => {
+          sessionStorage.setItem(sessionKey, String(data.id))
+          setPhase('recording')
+        })
+        .catch(() => setPhase('error'))
+    }
+
+    return () => {
+      reset()
+      sessionStorage.removeItem(sessionKey)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ââ Transitions âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
