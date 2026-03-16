@@ -31,6 +31,7 @@ import LoginPage                from './pages/LoginPage'
 import PorterHome               from './pages/PorterHome'
 import ScanVINPage              from './pages/ScanVINPage'
 import SelectInspectionTypePage from './pages/SelectInspectionTypePage'
+import SelectUserPage           from './pages/SelectUserPage'
 import InspectPage              from './pages/InspectPage'
 import ManagerLayout            from './pages/ManagerLayout'
 
@@ -51,6 +52,13 @@ export default function App() {
 
         {/* ── Public ─────────────────────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
+
+        {/* ── Porter user selection (requires JWT, not manager-only) ─── */}
+        <Route path="/select-user" element={
+          <ProtectedRoute>
+            <SelectUserPage />
+          </ProtectedRoute>
+        } />
 
         {/* ── Porter routes (any authenticated user) ─────────────────── */}
         <Route path="/" element={

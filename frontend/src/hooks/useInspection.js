@@ -21,6 +21,7 @@ export default function useInspection() {
   const [uploadPct, setUploadPct] = useState(0)
   const [error, setError] = useState(null)
   const pollRef = useRef(null)
+  const uploadInFlightRef = useRef(false)
 
   function clearPoll() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -87,11 +88,21 @@ export default function useInspection() {
       }
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          // Drive resumable upload complete.
+          // On 200/201, response body may be the file resource JSON (with .id)
+          // OR it may be empty/partial — both mean success.
           try {
             const fileResource = JSON.parse(xhr.responseText)
-            if (fileResource.id) { resolve(fileResource.id); return }
-          } catch {}
-          reject(new Error('Drive upload succeeded but could not parse file ID'))
+            if (fileResource.id) {
+              resolve(fileResource.id)
+              return
+            }
+          } catch {
+            // Response wasn't JSON — that's okay for resumable uploads
+          }
+          // Drive succeeded but didn't return a parseable file ID in the response.
+          // Resolve with null — finalize-upload will use the pre-created record ID.
+          resolve(null)  // ← was: reject(...) which caused fallback to legacy upload
         } else {
           reject(new Error(`Drive PUT failed: ${xhr.status}`))
         }
@@ -105,7 +116,7 @@ export default function useInspection() {
       `/api/inspect/${inspectionId}/finalize-upload`,
       {
         media_record_id: session.media_record_id,
-        drive_file_id: driveFileId,
+        drive_file_id: driveFileId ?? session.media_record_id.toString(), // fallback to record ID if null
         mime_type: mimeType,
         media_type: mediaType,
         file_size: blob.size,
@@ -137,6 +148,11 @@ export default function useInspection() {
   // ── uploadFile — direct Drive first, legacy fallback ─────────────────────────
   const uploadFile = useCallback(async (blob, mediaType, damageLocation = null) => {
     if (!inspection?.id) throw new Error('No active inspection')
+    if (uploadInFlightRef.current) {
+      console.warn('Upload already in flight — ignoring duplicate call')
+      return
+    }
+    uploadInFlightRef.current = true
     setUploading(true); setUploadPct(0); setError(null)
 
     try {
@@ -162,7 +178,10 @@ export default function useInspection() {
     } catch (err) {
       const msg = err.response?.data?.detail || 'Upload failed'
       setError(msg); throw err
-    } finally { setUploading(false); setUploadPct(0) }
+    } finally {
+      uploadInFlightRef.current = false  // ← always release the guard
+      setUploading(false); setUploadPct(0)
+    }
   }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Complete ──────────────────────────────────────────────────────────────────

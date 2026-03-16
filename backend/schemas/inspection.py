@@ -4,7 +4,7 @@ DealerSuite — Inspection Pydantic Schemas
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from schemas.damage import DamageResponse
 
@@ -53,7 +53,8 @@ class InspectionResponse(BaseModel):
     drive_folder_id:  Optional[str]  = None
     drive_folder_url: Optional[str]  = None
     video_url:        Optional[str]  = None
-    photo_count:      int
+    photo_count:      int            = 0
+    video_count:      int            = 0
     notes:            Optional[str]  = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
@@ -63,6 +64,13 @@ class InspectionResponse(BaseModel):
 
     # Inspection media (photos + videos)
     media: list[MediaItem] = []
+
+    @model_validator(mode='after')
+    def _compute_media_counts(self):
+        """Derive accurate counts from loaded media records."""
+        self.photo_count = sum(1 for m in self.media if m.media_type == 'photo')
+        self.video_count = sum(1 for m in self.media if m.media_type == 'video')
+        return self
 
     class Config:
         from_attributes = True
