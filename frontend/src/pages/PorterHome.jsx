@@ -1,10 +1,9 @@
 /**
  * DealerSuite — Porter Home Screen
- * The first screen a porter sees after login.
- * One giant "Start Inspection" button — nothing else to think about.
+ * Three large buttons: Loaner Out | Loaner Return | Manager Review
  */
 import { useNavigate } from 'react-router-dom'
-import { Camera, LogOut, Clock } from 'lucide-react'
+import { LogOut, LogIn, LayoutDashboard, LogOut as LogOutIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 function getGreeting() {
@@ -15,7 +14,7 @@ function getGreeting() {
 }
 
 export default function PorterHome() {
-  const { user, logout, isManager } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -35,57 +34,64 @@ export default function PorterHome() {
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Manager dashboard shortcut */}
-          {isManager && (
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-xs font-semibold text-brand-blue bg-brand-blue/10
-                         border border-brand-blue/30 rounded-xl px-4 py-2"
-            >
-              Dashboard
-            </button>
-          )}
-
-          {/* Logout */}
-          <button
-            onClick={handleLogout}
-            className="w-11 h-11 bg-brand-mid border border-brand-accent rounded-xl
-                       flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Log out"
-          >
-            <LogOut className="w-5 h-5 text-gray-400" />
-          </button>
-        </div>
+        <button
+          onClick={handleLogout}
+          className="w-11 h-11 bg-brand-mid border border-brand-accent rounded-xl
+                     flex items-center justify-center active:scale-95 transition-transform"
+          aria-label="Log out"
+        >
+          <LogOutIcon className="w-5 h-5 text-gray-400" />
+        </button>
       </header>
 
-      {/* Main CTA — takes up most of the screen */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+      {/* Three action buttons */}
+      <main className="flex-1 flex flex-col items-center justify-center px-6 gap-5">
 
-        {/* Giant start button */}
+        {/* Loaner Out */}
         <button
-          onClick={() => navigate('/scan')}
-          className="w-full max-w-xs aspect-square rounded-3xl
-                     bg-brand-blue flex flex-col items-center justify-center gap-5
-                     shadow-2xl shadow-brand-blue/40
+          onClick={() => navigate('/scan', { state: { preType: 'checkout' } })}
+          className="w-full max-w-sm rounded-3xl bg-brand-blue
+                     flex items-center gap-6 px-8 py-7
+                     shadow-xl shadow-brand-blue/30
                      active:scale-95 transition-transform select-none"
         >
-          <Camera className="w-24 h-24 text-white" strokeWidth={1.5} />
-          <span className="text-white text-2xl font-extrabold tracking-tight">
-            Start Inspection
-          </span>
+          <LogOut className="w-12 h-12 text-white shrink-0" strokeWidth={1.5} />
+          <div className="text-left">
+            <p className="text-white text-2xl font-extrabold">Loaner Out</p>
+            <p className="text-blue-200 text-sm">Customer taking a loaner</p>
+          </div>
         </button>
 
-        <p className="text-gray-500 text-sm text-center">
-          Tap to scan a VIN and begin your walkround
-        </p>
-      </main>
+        {/* Loaner Return */}
+        <button
+          onClick={() => navigate('/scan', { state: { preType: 'checkin' } })}
+          className="w-full max-w-sm rounded-3xl bg-brand-green
+                     flex items-center gap-6 px-8 py-7
+                     shadow-xl shadow-brand-green/30
+                     active:scale-95 transition-transform select-none"
+        >
+          <LogIn className="w-12 h-12 text-white shrink-0" strokeWidth={1.5} />
+          <div className="text-left">
+            <p className="text-white text-2xl font-extrabold">Loaner Return</p>
+            <p className="text-green-100 text-sm">Customer returning a loaner</p>
+          </div>
+        </button>
 
-      {/* Shift time indicator */}
-      <footer className="flex items-center justify-center gap-2 pb-10 text-gray-600 text-xs">
-        <Clock className="w-4 h-4" />
-        <span>Shift token valid 8 hours from login</span>
-      </footer>
+        {/* Manager Review */}
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="w-full max-w-sm rounded-3xl bg-brand-mid border border-brand-accent
+                     flex items-center gap-6 px-8 py-7
+                     active:scale-95 transition-transform select-none"
+        >
+          <LayoutDashboard className="w-12 h-12 text-gray-300 shrink-0" strokeWidth={1.5} />
+          <div className="text-left">
+            <p className="text-brand-white text-2xl font-extrabold">Manager Review</p>
+            <p className="text-gray-500 text-sm">Dashboard &amp; inspections</p>
+          </div>
+        </button>
+
+      </main>
 
     </div>
   )

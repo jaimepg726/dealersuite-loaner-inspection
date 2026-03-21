@@ -26,7 +26,7 @@ from services.inspection_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_UPLOAD_BYTES = 512 * 1024 * 1024  # 512 MB
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 class CompleteBody(BaseModel):
@@ -189,6 +189,7 @@ async def upload_media(
     final_backend = "database"
     try:
         from storage.drive_backend import GoogleDriveBackend
+        from sqlalchemy import select as _select
         drive = GoogleDriveBackend(db)
         creds = await drive._get_credentials()
         if creds:
@@ -196,7 +197,27 @@ async def upload_media(
             drive_filename = file.filename or f"{media_type}_{record.id}"
             drive_result = await drive.upload_file(content, drive_filename, content_type, folder_hint)
             if drive_result.success and drive_result.file_url:
-                record.file_url = drive_result.file_url
+                drive_url = drive_result.file_url
+                # Dedup: skip update if another row already has this exact drive URL for this inspection
+                dup = (await db.execute(
+                    _select(InspectionMedia).where(
+                        InspectionMedia.inspection_id == inspection_id,
+                        InspectionMedia.file_url == drive_url,
+                        InspectionMedia.id != record.id,
+                    )
+                )).scalar_one_or_none()
+                if dup:
+                    logger.info("Drive dedup: media %d is duplicate of %d, removing", record.id, dup.id)
+                    await db.delete(record)
+                    await db.commit()
+                    return UploadResponse(
+                        file_id=str(dup.id),
+                        file_url=dup.file_url,
+                        filename=file.filename or f"{media_type}_{dup.id}",
+                        bytes_uploaded=len(content),
+                        backend="drive",
+                    )
+                record.file_url = drive_url
                 await db.commit()
                 final_backend = "drive"
                 logger.info("Drive upload succeeded for media %d: %s", record.id, drive_result.file_url)

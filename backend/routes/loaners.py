@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from utils.time import utcnow
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from dependencies import get_db, get_current_user
 from models.loaner import Loaner
 from models.vehicle import Vehicle
 from schemas.loaner import LoanerCreate, LoanerCheckIn, LoanerOut
+from schemas.vehicle import VehicleResponse
 
 router = APIRouter()
 
@@ -48,6 +49,40 @@ async def checkin(id: int, body: LoanerCheckIn, db: AsyncSession = Depends(get_d
     if body.notes is not None: l.notes = body.notes
     await db.commit(); await db.refresh(l)
     return _enrich(l)
+
+@router.get("/by-number/{loaner_number}", response_model=VehicleResponse, summary="Look up vehicle by loaner number")
+async def get_by_loaner_number(
+    loaner_number: str,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """
+    Porter enters a loaner number (e.g. M501, m501, 501).
+    Returns the matching Vehicle in the same shape as the VIN lookup endpoint.
+    Normalisation: uppercase, strip whitespace.
+    If input is purely numeric (e.g. "501") also tries with an 'M' prefix ("M501").
+    """
+    normalized = loaner_number.strip().upper()
+
+    result = await db.execute(
+        select(Vehicle).where(func.upper(Vehicle.loaner_number) == normalized)
+    )
+    vehicle = result.scalar_one_or_none()
+
+    # Try 'M' prefix when caller omitted it (e.g. "501" -> "M501")
+    if vehicle is None and normalized.isdigit():
+        result = await db.execute(
+            select(Vehicle).where(func.upper(Vehicle.loaner_number) == f"M{normalized}")
+        )
+        vehicle = result.scalar_one_or_none()
+
+    if vehicle is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No vehicle found with loaner number '{loaner_number}'. Check the number and try again.",
+        )
+    return vehicle
+
 
 @router.delete("/{id}", status_code=204)
 async def delete_loaner(id: int, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):

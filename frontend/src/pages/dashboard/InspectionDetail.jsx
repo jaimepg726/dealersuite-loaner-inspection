@@ -74,19 +74,57 @@ function MediaGallery({ media }) {
             Videos ({videos.length})
           </p>
           <div className="flex flex-col gap-3">
-            {videos.map((m) => (
-              <div
-                key={m.id}
-                className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent"
-              >
-                <video
-                  src={m.file_url}
-                  controls
-                  className="w-full max-h-56 object-contain"
-                  preload="metadata"
-                />
-              </div>
-            ))}
+            {videos.map((m) => {
+              const isDriveUrl = m.file_url && m.file_url.includes('drive.google.com')
+              const isLocalUrl = m.file_url && (m.file_url.startsWith('/api/') || m.file_url.startsWith('http'))
+              // Drive URLs can't be streamed directly — show embed iframe or link
+              if (isDriveUrl) {
+                // Extract file ID for embed
+                const fileIdMatch = m.file_url.match(/\/d\/([a-zA-Z0-9_-]+)/)
+                const fileId = fileIdMatch ? fileIdMatch[1] : null
+                const embedUrl = fileId
+                  ? `https://drive.google.com/file/d/${fileId}/preview`
+                  : m.file_url
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent"
+                  >
+                    <iframe
+                      src={embedUrl}
+                      className="w-full"
+                      style={{ height: '220px', border: 'none' }}
+                      allow="autoplay"
+                      title={`Video ${m.id}`}
+                    />
+                    <a
+                      href={m.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 text-xs text-gray-400
+                                 hover:text-brand-blue transition-colors"
+                    >
+                      <Video className="w-3 h-3" />
+                      Open in Google Drive
+                    </a>
+                  </div>
+                )
+              }
+              // Local /api/media/ URLs — use native video element
+              return (
+                <div
+                  key={m.id}
+                  className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent"
+                >
+                  <video
+                    src={m.file_url}
+                    controls
+                    className="w-full max-h-56 object-contain"
+                    preload="metadata"
+                  />
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

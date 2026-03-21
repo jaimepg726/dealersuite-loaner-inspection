@@ -7,11 +7,13 @@ POST /api/vehicles              → create vehicle (manager+)
 PATCH /api/vehicles/{id}        → update vehicle (manager+)
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database import get_db
 from dependencies import get_current_user, require_manager
+from models.vehicle import Vehicle
 from schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse, VehicleListResponse
 from services.vehicle_service import (
     list_vehicles, get_vehicle_by_id, get_vehicle_by_vin,
@@ -32,6 +34,30 @@ async def route_list_vehicles(
 ):
     total, vehicles = await list_vehicles(db, status, vehicle_type, skip, limit)
     return VehicleListResponse(total=total, vehicles=vehicles)
+
+
+@router.post("/stub", response_model=VehicleResponse, status_code=201, summary="Create stub vehicle for non-fleet VIN")
+async def route_create_stub_vehicle(
+    vin: str = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Called when a porter scans a VIN not in the fleet and chooses to continue anyway.
+    Creates a minimal Vehicle record with vehicle_type='other' so an inspection can be started.
+    Idempotent: returns existing record if VIN already exists.
+    """
+    vin = vin.upper().strip()
+    result = await db.execute(select(Vehicle).where(Vehicle.vin == vin))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
+
+    vehicle = Vehicle(vin=vin, vehicle_type="other", status="Active")
+    db.add(vehicle)
+    await db.commit()
+    await db.refresh(vehicle)
+    return vehicle
 
 
 @router.get("/vin/{vin}", response_model=VehicleResponse, summary="Look up vehicle by VIN scan")

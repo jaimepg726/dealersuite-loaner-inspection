@@ -4,11 +4,11 @@
  * Full inspection flow orchestrator.
  *
  * Phases:
- *   init       → API start + Drive folder creation (from Stage 8)
+ *   init       → API start + Drive folder creation
  *   recording  → VideoRecorder walkround
- *   damage     → DamageLogger
+ *   damage     → DamageLogger (with persistent photo/video capture buttons)
  *   uploading  → UploadProgress (video → photos → damage records → complete)
- *   done       → Success screen with Drive folder link
+ *   done       → Success screen with auto-redirect after 2 s
  *   error      → Fatal error (API down, no vehicle, etc.)
  */
 import { useEffect, useState, useRef } from 'react'
@@ -19,6 +19,8 @@ import {
   AlertCircle,
   ExternalLink,
   Home,
+  Camera,
+  Video,
 } from 'lucide-react'
 import api            from '../utils/api'
 import PageHeader     from '../components/ui/PageHeader'
@@ -70,9 +72,15 @@ export default function InspectPage() {
   const [uploadError, setUploadError] = useState(null)
 
   // Media captured during recording — held in refs to avoid stale closures
-  const videoBlobRef  = useRef(null)
-  const photoBlobsRef = useRef([])  // still frames taken during walkround
-  const damagesRef    = useRef([])  // DamageLogger output
+  const videoBlobRef     = useRef(null)
+  const photoBlobsRef    = useRef([])   // still frames taken during walkround
+  const damagesRef       = useRef([])   // DamageLogger output
+  const uploadGuardRef   = useRef(false) // prevents double-submission (StrictMode / double-tap)
+  const extraVideoRef    = useRef(null)  // additional video captured from damage phase
+
+  // Hidden file input for quick photo/video capture during damage phase
+  const damagePhotoInputRef = useRef(null)
+  const damageVideoInputRef = useRef(null)
 
   // ── Start inspection on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -82,6 +90,13 @@ export default function InspectPage() {
       .catch(() => setPhase('error'))
     return () => reset()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-redirect home after 2 s on completion ───────────────────────────
+  useEffect(() => {
+    if (phase !== 'done') return
+    const timer = setTimeout(() => navigate('/', { replace: true }), 2000)
+    return () => clearTimeout(timer)
+  }, [phase, navigate])
 
   // ── Transitions ───────────────────────────────────────────────────────────
 
@@ -101,11 +116,32 @@ export default function InspectPage() {
     kickOffUploads([])
   }
 
+  // ── Extra media capture from damage phase ─────────────────────────────────
+
+  function handleExtraPhotoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const blob = file.slice(0, file.size, file.type)
+    photoBlobsRef.current = [...photoBlobsRef.current, blob]
+  }
+
+  function handleExtraVideoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Replace walkround video with this additional recording
+    extraVideoRef.current = file.slice(0, file.size, file.type)
+    videoBlobRef.current  = extraVideoRef.current
+  }
+
   // ── Upload orchestration ──────────────────────────────────────────────────
   async function kickOffUploads(damages) {
-    const videoBlob   = videoBlobRef.current
-    const photoDmg    = damages.filter(d => d.photoBlob)
-    const photoCount  = photoDmg.length
+    // Guard against double-invocation (React 18 StrictMode / accidental double-tap)
+    if (uploadGuardRef.current) return
+    uploadGuardRef.current = true
+
+    const videoBlob  = videoBlobRef.current
+    const photoDmg   = damages.filter(d => d.photoBlob)
+    const photoCount = photoDmg.length
 
     const steps = makeSteps(!!videoBlob, photoCount)
     setUploadSteps([...steps])
@@ -164,7 +200,6 @@ export default function InspectPage() {
       mark('active')
       if (!inspection) throw new Error('Inspection not found')
 
-      // Items without photos saved as-is; items with photos use the uploaded URL
       const photoDmgLocations = new Set(photoDmg.map(d => d.location + d.description))
       const textOnlyDamages = damages
         .filter(d => !d.photoBlob)
@@ -195,6 +230,7 @@ export default function InspectPage() {
       setPhase('done')
 
     } catch (err) {
+      uploadGuardRef.current = false   // allow retry
       mark('error')
       setUploadError(
         err.response?.data?.detail || err.message || 'Something went wrong'
@@ -232,7 +268,7 @@ export default function InspectPage() {
     )
   }
 
-  // ── Render: done ──────────────────────────────────────────────────────────
+  // ── Render: done (auto-redirects after 2 s) ───────────────────────────────
   if (phase === 'done') {
     return (
       <FullScreenShell title="Inspection Complete">
@@ -246,6 +282,16 @@ export default function InspectPage() {
             <p className="text-2xl font-extrabold text-brand-white">All Done!</p>
             <p className="text-gray-500 text-sm mt-1">
               {inspection?.inspection_type} inspection saved
+            </p>
+          </div>
+
+          {/* Confirmation checklist */}
+          <div className="flex flex-col gap-2 text-left">
+            <p className="text-green-400 font-semibold flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" /> Inspection Saved
+            </p>
+            <p className="text-green-400 font-semibold flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" /> Media Uploaded
             </p>
           </div>
 
@@ -269,6 +315,8 @@ export default function InspectPage() {
               item{damagesRef.current.length !== 1 ? 's' : ''} logged
             </p>
           )}
+
+          <p className="text-gray-600 text-xs">Returning to home screen…</p>
 
           <button onClick={() => navigate('/')} className="btn-primary mt-2">
             <Home className="w-5 h-5" />
@@ -328,11 +376,54 @@ export default function InspectPage() {
         )}
 
         {phase === 'damage' && (
-          <DamageLogger
-            capturedPhotos={photoBlobsRef.current}
-            onComplete={handleDamageComplete}
-            onSkip={handleSkipDamage}
-          />
+          <>
+            {/* Persistent Take Photo | Record Video buttons — always visible */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => damagePhotoInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2
+                           bg-brand-mid border border-brand-accent text-brand-white
+                           font-bold text-sm py-3 rounded-2xl
+                           active:scale-95 transition-transform"
+              >
+                <Camera className="w-4 h-4" />
+                Take Photo
+              </button>
+              <button
+                onClick={() => damageVideoInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2
+                           bg-brand-mid border border-brand-accent text-brand-white
+                           font-bold text-sm py-3 rounded-2xl
+                           active:scale-95 transition-transform"
+              >
+                <Video className="w-4 h-4" />
+                Record Video
+              </button>
+              {/* Hidden file inputs using native camera */}
+              <input
+                ref={damagePhotoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleExtraPhotoChange}
+              />
+              <input
+                ref={damageVideoInputRef}
+                type="file"
+                accept="video/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleExtraVideoChange}
+              />
+            </div>
+
+            <DamageLogger
+              capturedPhotos={photoBlobsRef.current}
+              onComplete={handleDamageComplete}
+              onSkip={handleSkipDamage}
+            />
+          </>
         )}
 
         {phase === 'uploading' && (
