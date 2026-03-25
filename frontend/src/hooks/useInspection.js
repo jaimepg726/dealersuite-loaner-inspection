@@ -2,13 +2,13 @@
  * useInspection — manages the lifecycle of an active inspection.
  *
  * Upload strategy:
- *  1. Try direct-to-Drive: GET /upload-session -> PUT blob directly to Drive
- *     resumable URL -> POST /finalize-upload with Drive file ID.
- *     Railway handles only tiny JSON — zero media bytes through Railway.
- *  2. Fall back to legacy /upload (multipart through Railway) if Drive
- *     not connected or session creation fails.
+ * 1. Try direct-to-Drive: GET /upload-session -> PUT blob directly to Drive
+ *    resumable URL -> POST /finalize-upload with Drive file ID.
+ *    Railway handles only tiny JSON — zero media bytes through Railway.
+ * 2. Fall back to legacy /upload (multipart through Railway) if Drive
+ *    not connected or session creation fails.
  */
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import api from '../utils/api'
 
 const POLL_INTERVAL_MS = 2500
@@ -20,9 +20,18 @@ export default function useInspection() {
   const [uploading, setUploading] = useState(false)
   const [uploadPct, setUploadPct] = useState(0)
   const [error, setError] = useState(null)
+
   const pollRef = useRef(null)
   const uploadInFlightRef = useRef(false)
-  const videoUploadedRef  = useRef(false) // true once a video upload completes for this inspection
+  const videoUploadedRef = useRef(false) // true once a video upload completes for this inspection
+
+  // Mirror inspection state into a ref so uploadFile never closes over a stale
+  // inspection value, and does NOT need inspection in its useCallback deps.
+  // This prevents uploadFile from being recreated mid-upload (which was the
+  // root cause of double-upload: setInspection() after video → new uploadFile
+  // reference → stale closure in kickOffUploads photo loop).
+  const inspectionRef = useRef(null)
+  useEffect(() => { inspectionRef.current = inspection }, [inspection])
 
   function clearPoll() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -40,13 +49,16 @@ export default function useInspection() {
       tries++
       try {
         const data = await fetchInspection(id)
-        if (data.drive_folder_id) { setInspection(data); clearPoll() }
-        else if (tries >= POLL_MAX_TRIES) { clearPoll() }
+        if (data.drive_folder_id) {
+          setInspection(data); clearPoll()
+        } else if (tries >= POLL_MAX_TRIES) {
+          clearPoll()
+        }
       } catch { clearPoll() }
     }, POLL_INTERVAL_MS)
   }
 
-  // ── Resume an existing inspection by ID (no new /start call) ────────────────
+  // ── Resume an existing inspection by ID (no new /start call) ──────────────
   const resume = useCallback(async (id) => {
     try {
       const data = await fetchInspection(id)
@@ -59,12 +71,13 @@ export default function useInspection() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Start ────────────────────────────────────────────────────────────────────
+  // ── Start ──────────────────────────────────────────────────────────────────
   const start = useCallback(async (vehicleId, type) => {
     setStarting(true); setError(null)
     try {
       const { data } = await api.post('/api/inspect/start', {
-        vehicle_id: vehicleId, inspection_type: type,
+        vehicle_id: vehicleId,
+        inspection_type: type,
       })
       setInspection(data)
       if (!data.drive_folder_id) startPollingForFolder(data.id)
@@ -72,19 +85,16 @@ export default function useInspection() {
     } catch (err) {
       const msg = err.response?.data?.detail || 'Could not start inspection'
       setError(msg); throw err
-    } finally { setStarting(false) }
+    } finally {
+      setStarting(false)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Direct-to-Drive upload ───────────────────────────────────────────────────
+  // ── Direct-to-Drive upload ──────────────────────────────────────────────────
   async function _directDriveUpload(blob, mediaType, damageLocation, inspectionId, onProgress) {
     const mimeType = blob.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg')
     const params = new URLSearchParams({ mime_type: mimeType, media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
-
-    // Step 1: Get Drive resumable URL from Railway (tiny JSON, no media bytes).
-    // A 409 response means the backend detected a duplicate video upload within
-    // 60s — return a skipped sentinel so the caller does NOT fall back to the
-    // legacy Railway proxy (which would create a second Drive file anyway).
     let session
     try {
       const { data } = await api.post(`/api/inspect/${inspectionId}/upload-session?${params}`)
@@ -94,151 +104,107 @@ export default function useInspection() {
         console.warn('upload-session 409: duplicate video upload detected — skipping')
         return { file_id: null, file_url: '', backend: 'skipped-duplicate' }
       }
-      throw err  // re-throw anything else so uploadFile can fall back to legacy
+      throw err
     }
-
-    // Step 2: PUT blob directly to Google Drive resumable URL.
-    // Use raw XHR — NOT the api axios instance — for two critical reasons:
-    //   (a) Must NOT attach the DealerSuite JWT to a Google API request
-    //   (b) Must NOT prepend the Railway base URL to the Google URL
-    // Drive returns the file resource JSON (with "id") on 200/201.
     const driveFileId = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', session.resumable_url)
       xhr.setRequestHeader('Content-Type', mimeType)
       xhr.upload.onprogress = (evt) => {
-        if (evt.lengthComputable && onProgress) {
-          onProgress(Math.round((evt.loaded / evt.total) * 100))
-        }
+        if (evt.lengthComputable && onProgress) onProgress(Math.round((evt.loaded / evt.total) * 100))
       }
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          // Drive resumable upload complete.
-          // On 200/201, response body may be the file resource JSON (with .id)
-          // OR it may be empty/partial — both mean success.
-          try {
-            const fileResource = JSON.parse(xhr.responseText)
-            if (fileResource.id) {
-              resolve(fileResource.id)
-              return
-            }
-          } catch {
-            // Response wasn't JSON — that's okay for resumable uploads
-          }
-          // Drive succeeded but didn't return a parseable file ID in the response.
-          // Resolve with null — finalize-upload will use the pre-created record ID.
-          resolve(null)  // ← was: reject(...) which caused fallback to legacy upload
-        } else {
-          reject(new Error(`Drive PUT failed: ${xhr.status}`))
-        }
+          try { const fr = JSON.parse(xhr.responseText); if (fr.id) { resolve(fr.id); return } } catch {}
+          resolve(null)
+        } else { reject(new Error(`Drive PUT failed: ${xhr.status}`)) }
       }
       xhr.onerror = () => reject(new Error('Drive PUT network error'))
       xhr.send(blob)
     })
-
-    // Step 3: Tell Railway the Drive file ID (tiny JSON, no media bytes)
-    const { data: finalized } = await api.post(
-      `/api/inspect/${inspectionId}/finalize-upload`,
-      {
-        media_record_id: session.media_record_id,
-        drive_file_id: driveFileId ?? session.media_record_id.toString(), // fallback to record ID if null
-        mime_type: mimeType,
-        media_type: mediaType,
-        file_size: blob.size,
-      }
-    )
+    const { data: finalized } = await api.post(`/api/inspect/${inspectionId}/finalize-upload`, {
+      media_record_id: session.media_record_id,
+      drive_file_id: driveFileId ?? session.media_record_id.toString(),
+      mime_type: mimeType, media_type: mediaType, file_size: blob.size,
+    })
     return finalized
   }
 
-  // ── Legacy upload (Railway proxy — fallback when Drive not connected) ─────────
+  // ── Legacy upload (Railway proxy — fallback when Drive not connected) ────────
   async function _legacyUpload(blob, mediaType, damageLocation, inspectionId, onProgress) {
     const form = new FormData()
     const ext = mediaType === 'video' ? 'mp4' : 'jpg'
     form.append('file', blob, `${mediaType}.${ext}`)
     const params = new URLSearchParams({ media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
-    const { data } = await api.post(
-      `/api/inspect/${inspectionId}/upload?${params}`,
-      form,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (evt) => {
-          if (evt.total && onProgress) onProgress(Math.round((evt.loaded * 100) / evt.total))
-        },
-      }
-    )
+    const { data } = await api.post(`/api/inspect/${inspectionId}/upload?${params}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (evt) => {
+        if (evt.total && onProgress) onProgress(Math.round((evt.loaded * 100) / evt.total))
+      },
+    })
     return data
   }
 
-  // ── uploadFile — direct Drive first, legacy fallback ─────────────────────────
+  // ── uploadFile — direct Drive first, legacy fallback ───────────────────────
+  // IMPORTANT: empty deps — uses inspectionRef to avoid stale closure/double-upload bug
   const uploadFile = useCallback(async (blob, mediaType, damageLocation = null) => {
-    if (!inspection?.id) throw new Error('No active inspection')
-
-    // One video per inspection lifecycle — drop any duplicate before touching the network.
+    const currentInspection = inspectionRef.current
+    if (!currentInspection?.id) throw new Error('No active inspection')
     if (mediaType === 'video' && videoUploadedRef.current) {
       console.warn('Video already uploaded for this inspection — skipping duplicate')
       return null
     }
-
     if (uploadInFlightRef.current) {
       console.warn('Upload already in flight — ignoring duplicate call')
       return
     }
     uploadInFlightRef.current = true
     setUploading(true); setUploadPct(0); setError(null)
-
     try {
       let result
       try {
-        result = await _directDriveUpload(
-          blob, mediaType, damageLocation, inspection.id,
-          (pct) => setUploadPct(pct)
-        )
+        result = await _directDriveUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct))
       } catch (directErr) {
-        // Drive not connected or session failed — fall back to legacy
         console.warn('Direct Drive upload failed, falling back to Railway proxy:', directErr.message)
         setUploadPct(0)
-        result = await _legacyUpload(
-          blob, mediaType, damageLocation, inspection.id,
-          (pct) => setUploadPct(pct)
-        )
+        result = await _legacyUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct))
       }
-
       if (mediaType === 'video') videoUploadedRef.current = true
-      const updated = await fetchInspection(inspection.id)
+      const updated = await fetchInspection(currentInspection.id)
       setInspection(updated)
       return result
     } catch (err) {
       const msg = err.response?.data?.detail || 'Upload failed'
       setError(msg); throw err
     } finally {
-      uploadInFlightRef.current = false  // ← always release the guard
+      uploadInFlightRef.current = false
       setUploading(false); setUploadPct(0)
     }
-  }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Complete ──────────────────────────────────────────────────────────────────
+  // ── Complete ────────────────────────────────────────────────────────────────
   const complete = useCallback(async (photoCount = 0, notes = null) => {
-    if (!inspection?.id) throw new Error('No active inspection')
+    const currentInspection = inspectionRef.current
+    if (!currentInspection?.id) throw new Error('No active inspection')
     setError(null)
     try {
-      const { data } = await api.post(`/api/inspect/${inspection.id}/complete`, {
-        photo_count: photoCount, notes,
-      })
+      const { data } = await api.post(`/api/inspect/${currentInspection.id}/complete`, { photo_count: photoCount, notes })
       clearPoll(); setInspection(data); return data
     } catch (err) {
       const msg = err.response?.data?.detail || 'Could not complete inspection'
       setError(msg); throw err
     }
-  }, [inspection])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Reset ─────────────────────────────────────────────────────────────────────
+  // ── Reset ───────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     clearPoll()
     setInspection(null); setStarting(false); setUploading(false)
     setUploadPct(0); setError(null)
     uploadInFlightRef.current = false
-    videoUploadedRef.current  = false
+    videoUploadedRef.current = false
+    inspectionRef.current = null
   }, [])
 
   return { inspection, starting, uploading, uploadPct, error, start, resume, uploadFile, complete, reset }
