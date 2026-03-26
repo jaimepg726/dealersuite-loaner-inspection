@@ -16,11 +16,12 @@ KEY_GOOGLE_ACCESS_TOKEN  = "google_access_token"
 KEY_GOOGLE_REFRESH_TOKEN = "google_refresh_token"
 KEY_GOOGLE_TOKEN_EXPIRY  = "google_token_expiry"
 KEY_GOOGLE_ACCOUNT_EMAIL = "google_account_email"
-KEY_DRIVE_ROOT_FOLDER_ID = "drive_root_folder_id"
-KEY_DRIVE_INSP_FOLDER_ID = "drive_inspections_folder_id"
-KEY_DRIVE_DMG_FOLDER_ID  = "drive_damage_folder_id"
-KEY_DRIVE_FOLDER_NAME    = "drive_root_folder_name"
-KEY_OAUTH_STATE          = "oauth_csrf_state"
+KEY_DRIVE_ROOT_FOLDER_ID       = "drive_root_folder_id"
+KEY_DRIVE_INSP_FOLDER_ID       = "drive_inspections_folder_id"
+KEY_DRIVE_DMG_FOLDER_ID        = "drive_damage_folder_id"
+KEY_DRIVE_CONDITION_FOLDER_ID  = "drive_condition_folder_id"
+KEY_DRIVE_FOLDER_NAME          = "drive_root_folder_name"
+KEY_OAUTH_STATE                = "oauth_csrf_state"
 
 
 def _get_fernet():

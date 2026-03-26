@@ -22,6 +22,7 @@ _TYPE_NORM: dict[str, str] = {
     "checkin":   "Checkin",
     "inventory": "Inventory",
     "sales":     "Sales",
+    "condition": "Condition",
 }
 
 
@@ -31,22 +32,34 @@ async def start_inspection(
     current_user: User,
 ) -> Inspection:
     """Create a new in-progress inspection record."""
-    # Confirm vehicle exists
-    result = await db.execute(select(Vehicle).where(Vehicle.id == data.vehicle_id))
-    vehicle = result.scalar_one_or_none()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-
     # Normalise to canonical title-case so dashboard filters and stats match.
     norm_type = _TYPE_NORM.get(data.inspection_type.lower(), data.inspection_type.capitalize())
 
+    vehicle_id: int | None = None
+    if data.vehicle_id is not None:
+        # Standard flow — confirm vehicle exists
+        result = await db.execute(select(Vehicle).where(Vehicle.id == data.vehicle_id))
+        vehicle = result.scalar_one_or_none()
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        vehicle_id = data.vehicle_id
+    elif norm_type != "Condition":
+        # Only Condition inspections may omit vehicle_id
+        raise HTTPException(status_code=422, detail="vehicle_id is required for non-Condition inspections")
+
+    # Normalise vin_override: strip whitespace and uppercase
+    vin_override: str | None = None
+    if data.vin_override:
+        vin_override = data.vin_override.strip().upper() or None
+
     inspection = Inspection(
-        vehicle_id      = data.vehicle_id,
+        vehicle_id      = vehicle_id,
         inspector_id    = current_user.id,
         inspector_name  = current_user.name,
         inspection_type = norm_type,
         status          = InspectionStatus.in_progress,
         started_at      = datetime.now(timezone.utc),
+        vin_override    = vin_override,
     )
     db.add(inspection)
     await db.flush()

@@ -153,14 +153,23 @@ async def create_upload_session(
 
     # Ensure Drive folders exist
     folders = await drive._ensure_folders()
-    folder_id = folders.get("inspections") if media_type == "video" else folders.get("damage", folders.get("inspections"))
+    if inspection.inspection_type == "Condition" and media_type == "video":
+        folder_id = folders.get("customer-condition", folders.get("inspections"))
+    elif media_type == "video":
+        folder_id = folders.get("inspections")
+    else:
+        folder_id = folders.get("damage", folders.get("inspections"))
 
     # Build filename
-    loaner_number = inspection.vehicle.loaner_number if inspection.vehicle else None
-    insp_type = (inspection.inspection_type or "inspection").lower()
     ext = _MIME_EXT_MAP.get(mime_type.split(";")[0].strip(), "bin")
-    suffix = damage_location if media_type == "photo" and damage_location else ""
-    filename = _build_filename(loaner_number, insp_type, ext, suffix=suffix)
+    if inspection.inspection_type == "Condition":
+        from storage.drive_backend import build_condition_filename as _build_condition_filename
+        filename = _build_condition_filename(getattr(inspection, 'vin_override', None), ext)
+    else:
+        loaner_number = inspection.vehicle.loaner_number if inspection.vehicle else None
+        insp_type = (inspection.inspection_type or "inspection").lower()
+        suffix = damage_location if media_type == "photo" and damage_location else ""
+        filename = _build_filename(loaner_number, insp_type, ext, suffix=suffix)
 
     # Create Google Drive resumable upload session
     meta = {"name": filename, "parents": [folder_id]}

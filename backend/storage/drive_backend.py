@@ -59,6 +59,22 @@ def build_filename(
     return f"{base}.{ext.lstrip('.')}"
 
 
+def build_condition_filename(vin_override: Optional[str], ext: str) -> str:
+    """
+    Format: {YYYY-MM-DD}_{VIN_or_LAST7_label}.{ext}
+    Prepends LAST7_ only when the identifier is 7 chars or fewer (a partial VIN).
+    Examples:
+        2026-03-26_WMW23GD08T2A12345.mp4   (full 17-char VIN)
+        2026-03-26_LAST7_2A12345.mp4       (last-7 only)
+        2026-03-26_UNKNOWN.mp4             (nothing provided)
+    """
+    now = datetime.now(timezone.utc)
+    date_s = now.strftime("%Y-%m-%d")
+    safe = re.sub(r"[^A-Za-z0-9]", "", (vin_override or "UNKNOWN").upper())
+    label = f"LAST7_{safe}" if len(safe) <= 7 else safe
+    return f"{date_s}_{label}.{ext.lstrip('.')}"
+
+
 class GoogleDriveBackend(StorageBackend):
     """
     Uses OAuth tokens stored in the database settings table.
@@ -219,13 +235,19 @@ class GoogleDriveBackend(StorageBackend):
         global _folder_cache
 
         # Layer 1: in-memory cache hit — zero I/O
-        if _folder_cache.get("root") and _folder_cache.get("inspections") and _folder_cache.get("damage"):
+        if (
+            _folder_cache.get("root")
+            and _folder_cache.get("inspections")
+            and _folder_cache.get("damage")
+            and _folder_cache.get("customer-condition")
+        ):
             return _folder_cache
 
         from services.settings_service import (
             get_setting, set_setting,
             KEY_DRIVE_ROOT_FOLDER_ID, KEY_DRIVE_INSP_FOLDER_ID,
             KEY_DRIVE_DMG_FOLDER_ID, KEY_DRIVE_FOLDER_NAME,
+            KEY_DRIVE_CONDITION_FOLDER_ID,
         )
         import httpx
 
@@ -233,9 +255,13 @@ class GoogleDriveBackend(StorageBackend):
         root_id = await get_setting(self._db, KEY_DRIVE_ROOT_FOLDER_ID)
         insp_id = await get_setting(self._db, KEY_DRIVE_INSP_FOLDER_ID)
         dmg_id  = await get_setting(self._db, KEY_DRIVE_DMG_FOLDER_ID)
+        cond_id = await get_setting(self._db, KEY_DRIVE_CONDITION_FOLDER_ID)
 
-        if root_id and insp_id and dmg_id:
-            _folder_cache = {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+        if root_id and insp_id and dmg_id and cond_id:
+            _folder_cache = {
+                "root": root_id, "inspections": insp_id,
+                "damage": dmg_id, "customer-condition": cond_id,
+            }
             return _folder_cache
 
         # Layer 3: Drive API (first run only)
@@ -276,15 +302,23 @@ class GoogleDriveBackend(StorageBackend):
         root_id = await find_or_create(ROOT_FOLDER)
         insp_id = await find_or_create("inspections", root_id)
         dmg_id  = await find_or_create("damage", root_id)
+        cond_id = await find_or_create("customer-condition", root_id)
 
         await set_setting(self._db, KEY_DRIVE_ROOT_FOLDER_ID, root_id)
         await set_setting(self._db, KEY_DRIVE_INSP_FOLDER_ID, insp_id)
         await set_setting(self._db, KEY_DRIVE_DMG_FOLDER_ID, dmg_id)
+        await set_setting(self._db, KEY_DRIVE_CONDITION_FOLDER_ID, cond_id)
         await set_setting(self._db, KEY_DRIVE_FOLDER_NAME, ROOT_FOLDER)
         await self._db.commit()
-        logger.info("Drive: folders ready — root=%s insp=%s dmg=%s", root_id, insp_id, dmg_id)
+        logger.info(
+            "Drive: folders ready — root=%s insp=%s dmg=%s cond=%s",
+            root_id, insp_id, dmg_id, cond_id,
+        )
 
-        _folder_cache = {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+        _folder_cache = {
+            "root": root_id, "inspections": insp_id,
+            "damage": dmg_id, "customer-condition": cond_id,
+        }
         return _folder_cache
 
     def _build_service(self, creds):

@@ -22,6 +22,7 @@ class InspectionType(str, enum.Enum):
     checkin   = "Checkin"
     inventory = "Inventory"
     sales     = "Sales"
+    condition = "Condition"
 
 
 class InspectionStatus(str, enum.Enum):
@@ -36,12 +37,15 @@ class Inspection(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
     # Foreign keys
-    vehicle_id: Mapped[int] = mapped_column(
-        ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True
+    vehicle_id: Mapped[int | None] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=True, index=True
     )
     inspector_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+
+    # Raw VIN or last-7 for condition inspections (no linked vehicle record)
+    vin_override: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # Inspection metadata  (String to match migration — enums used for validation only)
     inspection_type: Mapped[str] = mapped_column(
@@ -82,7 +86,7 @@ class Inspection(Base):
     )
 
     # Relationships
-    vehicle:  Mapped["Vehicle"] = relationship("Vehicle", back_populates="inspections")
+    vehicle:  Mapped["Vehicle | None"] = relationship("Vehicle", back_populates="inspections")
     damages:  Mapped[list["Damage"]] = relationship(
         "Damage", back_populates="inspection", cascade="all, delete-orphan"
     )

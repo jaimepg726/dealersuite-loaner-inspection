@@ -26,11 +26,12 @@ import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner'
 
 // ── Type config ───────────────────────────────────────────────────────────────────
 const TYPE_LABELS = {
-  checkout:   { label: 'Checkout Inspection', color: 'text-brand-blue' },
-  checkin:    { label: 'Check-In Inspection',  color: 'text-brand-green' },
-  inventory:  { label: 'Inventory Inspection', color: 'text-purple-400' },
-  sales:      { label: 'Sales Inspection',     color: 'text-orange-400' },
-  inspection: { label: 'Inspection',           color: 'text-gray-300' },
+  checkout:   { label: 'Checkout Inspection',  color: 'text-brand-blue' },
+  checkin:    { label: 'Check-In Inspection',   color: 'text-brand-green' },
+  inventory:  { label: 'Inventory Inspection',  color: 'text-purple-400' },
+  sales:      { label: 'Sales Inspection',      color: 'text-orange-400' },
+  condition:  { label: 'Condition Inspection',  color: 'text-teal-400' },
+  inspection: { label: 'Inspection',            color: 'text-gray-300' },
 }
 
 const TYPE_API_MAP = {
@@ -38,6 +39,7 @@ const TYPE_API_MAP = {
   checkin:    'checkin',
   inventory:  'Inventory',
   sales:      'Sales',
+  condition:  'condition',
   inspection: 'inspection',
 }
 

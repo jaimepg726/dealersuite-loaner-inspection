@@ -11,8 +11,9 @@ from schemas.damage import DamageResponse
 
 class InspectionStart(BaseModel):
     """Porter sends this when tapping 'Start Inspection'."""
-    vehicle_id:      int
-    inspection_type: str  # "Checkout" | "Checkin" | "Inventory" | "Sales"
+    vehicle_id:      Optional[int] = None  # None allowed for Condition type
+    inspection_type: str  # "Checkout" | "Checkin" | "Inventory" | "Sales" | "Condition"
+    vin_override:    Optional[str] = None  # Raw VIN or last-7 for Condition inspections
 
 
 class InspectionComplete(BaseModel):
@@ -46,10 +47,11 @@ class VehicleBrief(BaseModel):
 
 class InspectionResponse(BaseModel):
     id:               int
-    vehicle_id:       int
+    vehicle_id:       Optional[int]  = None
     inspection_type:  str
     status:           str
     inspector_name:   Optional[str]  = None
+    vin_override:     Optional[str]  = None
     drive_folder_id:  Optional[str]  = None
     drive_folder_url: Optional[str]  = None
     video_url:        Optional[str]  = None
@@ -58,6 +60,7 @@ class InspectionResponse(BaseModel):
     notes:            Optional[str]  = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
+    vehicle:          Optional[VehicleBrief] = None
 
     # Nested damages (loaded when viewing a single inspection)
     damages: list[DamageResponse] = []
@@ -88,7 +91,7 @@ class InspectionResponse(BaseModel):
 class InspectionSummary(BaseModel):
     """Lightweight version for list views — includes vehicle for card display."""
     id:               int
-    vehicle_id:       int
+    vehicle_id:       Optional[int]  = None
     inspection_type:  str
     status:           str
     inspector_name:   Optional[str]    = None
