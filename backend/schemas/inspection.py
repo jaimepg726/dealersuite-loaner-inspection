@@ -67,9 +67,18 @@ class InspectionResponse(BaseModel):
 
     @model_validator(mode='after')
     def _compute_media_counts(self):
-        """Derive accurate counts from loaded media records."""
-        self.photo_count = sum(1 for m in self.media if m.media_type == 'photo')
-        self.video_count = sum(1 for m in self.media if m.media_type == 'video')
+        """Derive accurate counts from loaded media records.
+
+        Excludes 'pending' records — these are orphaned upload-session stubs
+        from failed direct-to-Drive uploads that never reached /finalize-upload.
+        Counting them as real media would show inflated video/photo counts.
+        """
+        # Strip orphaned pending records before counting and before returning
+        # the media list so the manager gallery never shows a broken player.
+        active = [m for m in self.media if m.file_url != 'pending']
+        self.media = active
+        self.photo_count = sum(1 for m in active if m.media_type == 'photo')
+        self.video_count = sum(1 for m in active if m.media_type == 'video')
         return self
 
     class Config:

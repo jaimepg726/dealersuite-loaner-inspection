@@ -13,8 +13,9 @@
  * Walkround overlay:
  *   9 guided steps with individual countdown timers. Auto-advances.
  *   Porter sees exactly where to point the camera at all times.
+ *   Step config and timing live in src/config/walkroundSteps.js.
  *
- * Minimum recording: 60 seconds. Stop Recording is disabled until then.
+ * Minimum recording: controlled by MIN_RECORD_SECONDS in config.
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -22,21 +23,46 @@ import {
   Video, Square, Camera, RefreshCw, CheckCircle, AlertCircle, Loader,
 } from 'lucide-react'
 import useCamera from '../../hooks/useCamera'
+import { WALKROUND_STEPS, MIN_RECORD_SECONDS } from '../../config/walkroundSteps'
 
-// ── Walkround steps ────────────────────────────────────────────────────────
-const WALKROUND_STEPS = [
-  { label: 'Driver Front Wheel',    hint: 'Get close — show full wheel face',    duration: 8 },
-  { label: 'Driver Side',           hint: 'Hold level at door handle height',    duration: 8 },
-  { label: 'Driver Rear Wheel',     hint: 'Get close — show full wheel face',    duration: 6 },
-  { label: 'Rear Bumper',           hint: 'Full width — stay level',             duration: 6 },
-  { label: 'Passenger Rear Wheel',  hint: 'Get close — show full wheel face',    duration: 6 },
-  { label: 'Passenger Side',        hint: 'Level sweep — front to back',         duration: 8 },
-  { label: 'Passenger Front Wheel', hint: 'Get close — show full wheel face',    duration: 6 },
-  { label: 'Front Bumper',          hint: 'Step back — capture full width',      duration: 6 },
-  { label: 'Windshield & Hood',     hint: 'Step back — get full glass and hood', duration: 8 },
-]
-
-const MIN_RECORD_SECONDS = 60
+// ── Top-down car position indicator ────────────────────────────────────────
+// Renders a minimal SVG car outline with a dot showing the current step zone.
+// Positions (cx/cy) are defined per step in walkroundSteps.js.
+function CarPositionGraphic({ stepIndex }) {
+  const step = WALKROUND_STEPS[stepIndex] ?? WALKROUND_STEPS[WALKROUND_STEPS.length - 1]
+  return (
+    <svg
+      viewBox="0 0 56 92"
+      width="36"
+      height="59"
+      aria-hidden="true"
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      {/* Car body */}
+      <rect x="11" y="9" rx="5" ry="5" width="34" height="72" fill="#1f2937" stroke="#4b5563" strokeWidth="1.5" />
+      {/* Windshield / front glass */}
+      <rect x="14" y="13" rx="3" ry="3" width="28" height="18" fill="#111827" stroke="#374151" strokeWidth="1" />
+      {/* Rear glass */}
+      <rect x="14" y="59" rx="3" ry="3" width="28" height="14" fill="#111827" stroke="#374151" strokeWidth="1" />
+      {/* Centre console divider */}
+      <line x1="28" y1="31" x2="28" y2="59" stroke="#374151" strokeWidth="1" />
+      {/* Wheels */}
+      <rect x="8"  y="16" rx="2" ry="2" width="6" height="11" fill="#374151" />
+      <rect x="42" y="16" rx="2" ry="2" width="6" height="11" fill="#374151" />
+      <rect x="8"  y="63" rx="2" ry="2" width="6" height="11" fill="#374151" />
+      <rect x="42" y="63" rx="2" ry="2" width="6" height="11" fill="#374151" />
+      {/* Active position dot */}
+      <circle
+        cx={step.cx}
+        cy={step.cy}
+        r="4"
+        fill="#3b82f6"
+        stroke="#93c5fd"
+        strokeWidth="1.5"
+      />
+    </svg>
+  )
+}
 
 export default function VideoRecorder({ onComplete }) {
   const cam = useCamera()
@@ -197,29 +223,35 @@ export default function VideoRecorder({ onComplete }) {
         )}
         {phase === 'recording' && (
           <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
-            <div className="bg-black/80 backdrop-blur-sm rounded-xl px-4 py-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1 items-center">
-                    {WALKROUND_STEPS.map((_, i) => (
-                      <div key={i} className={`rounded-full transition-all duration-300 ${
-                        i < stepIndex ? 'w-1.5 h-1.5 bg-green-400'
-                        : i === stepIndex ? 'w-2.5 h-2.5 bg-brand-blue'
-                        : 'w-1.5 h-1.5 bg-gray-600'
-                      }`} />
-                    ))}
+            <div className="bg-black/80 backdrop-blur-sm rounded-xl px-3 py-3">
+              {/* Car position graphic + step header */}
+              <div className="flex items-start gap-3 mb-1.5">
+                <CarPositionGraphic stepIndex={stepIndex} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1 items-center">
+                      {WALKROUND_STEPS.map((_, i) => (
+                        <div key={i} className={`rounded-full transition-all duration-300 ${
+                          i < stepIndex ? 'w-1.5 h-1.5 bg-green-400'
+                          : i === stepIndex ? 'w-2.5 h-2.5 bg-brand-blue'
+                          : 'w-1.5 h-1.5 bg-gray-600'
+                        }`} />
+                      ))}
+                      <span className="text-gray-400 text-xs font-semibold ml-1">
+                        {stepIndex + 1}/{WALKROUND_STEPS.length}
+                      </span>
+                    </div>
+                    <div className={`font-mono font-black text-2xl leading-none ${
+                      allDone ? 'text-green-400' : stepSecsLeft <= 3 ? 'text-yellow-400' : 'text-white'
+                    }`}>
+                      {allDone ? '✓' : `${stepSecsLeft}s`}
+                    </div>
                   </div>
-                  <span className="text-gray-400 text-xs font-semibold">Step {stepIndex + 1}/{WALKROUND_STEPS.length}</span>
-                </div>
-                <div className={`font-mono font-black text-2xl leading-none ${
-                  allDone ? 'text-green-400' : stepSecsLeft <= 3 ? 'text-yellow-400' : 'text-white'
-                }`}>
-                  {allDone ? '✓' : `${stepSecsLeft}s`}
+                  <p className="text-white font-bold text-base leading-tight mt-1">📍 {currentStep.label}</p>
+                  <p className="text-gray-300 text-xs mt-0.5 leading-tight">{currentStep.hint}</p>
                 </div>
               </div>
-              <p className="text-white font-bold text-base leading-tight">📍 {currentStep.label}</p>
-              <p className="text-gray-300 text-xs mt-0.5 leading-tight">{currentStep.hint}</p>
-              <div className="mt-2 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full transition-all duration-1000 ease-linear ${
                   allDone ? 'bg-green-400' : 'bg-brand-blue'
                 }`} style={{ width: `${stepProgress * 100}%` }} />

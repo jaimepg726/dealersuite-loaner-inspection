@@ -182,29 +182,40 @@ async def create_upload_session(
     if not resumable_url:
         raise HTTPException(status_code=502, detail="Drive did not return a resumable URL")
 
-    # Deduplication guard — if any video record (pending OR finalized) was
-    # already created for this inspection in the last 60 seconds, reject the
-    # duplicate request outright so the first upload is not interrupted.
+    # Deduplication guard for video uploads:
+    #   • pending orphan  (file_url == "pending") → previous session failed mid-flight;
+    #     delete the orphan so the caller can start a fresh session.
+    #   • finalized record (file_url != "pending") → video already uploaded; reject.
+    # No time window: we check all historical records so a session-resume or
+    # Drive-PUT failure cannot sneak a second record through.
     if media_type == "video":
-        from datetime import timedelta
-        cutoff = _utcnow() - timedelta(seconds=60)
         dup_result = await db.execute(
             select(InspectionMedia).where(
                 InspectionMedia.inspection_id == inspection_id,
                 InspectionMedia.media_type == "video",
-                InspectionMedia.created_at >= cutoff,
             )
         )
-        if dup_result.scalars().first():
+        existing_vid = dup_result.scalars().first()
+        if existing_vid:
+            if existing_vid.file_url != "pending":
+                logger.warning(
+                    "upload-session: finalized video already exists for inspection %d "
+                    "(record %d) — rejecting duplicate session",
+                    inspection_id, existing_vid.id,
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail="Video upload already in progress for this inspection",
+                )
+            # Orphaned pending record from a previous failed attempt — delete it
+            # so this retry session can proceed cleanly.
             logger.warning(
-                "upload-session: duplicate video request for inspection %d "
-                "within 60s — rejecting to prevent double upload",
-                inspection_id,
+                "upload-session: deleting orphaned pending video record %d "
+                "for inspection %d — allowing retry",
+                existing_vid.id, inspection_id,
             )
-            raise HTTPException(
-                status_code=409,
-                detail="Video upload already in progress for this inspection",
-            )
+            await db.delete(existing_vid)
+            await db.commit()
 
     # Pre-create the media record so we have an ID to return
     # file_url is a placeholder — updated in /finalize-upload
@@ -314,7 +325,33 @@ async def upload_media(
     if content_type not in ALLOWED_MIMETYPES:
         raise HTTPException(status_code=415, detail=f"Unsupported MIME type '{content_type}'")
 
-    # Dedup check
+    # Video dedup — if any video record already exists for this inspection
+    # (including a "pending" orphan from a failed /upload-session), return it
+    # rather than creating a second record.  This is the critical guard that
+    # prevents the upload-session-pending + legacy-fallback double-record bug.
+    if media_type == "video":
+        vid_dup = await db.execute(
+            select(InspectionMedia).where(
+                InspectionMedia.inspection_id == inspection_id,
+                InspectionMedia.media_type == "video",
+            )
+        )
+        vid_existing = vid_dup.scalars().first()
+        if vid_existing:
+            logger.warning(
+                "upload (legacy): video already exists for inspection %d "
+                "(record %d, url=%s) — skipping duplicate",
+                inspection_id, vid_existing.id, vid_existing.file_url,
+            )
+            return UploadResponse(
+                file_id=str(vid_existing.id),
+                file_url=vid_existing.file_url,
+                filename=file.filename or f"video_{vid_existing.id}",
+                bytes_uploaded=len(content),
+                backend="deduplicated",
+            )
+
+    # Hash-based dedup (applies to photos and any edge cases not caught above)
     file_hash = hashlib.sha256(content).hexdigest()
     dup = await db.execute(
         select(InspectionMedia).where(
