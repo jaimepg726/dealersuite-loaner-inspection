@@ -172,6 +172,12 @@ export default function InspectPage() {
 
       // Step 3 — save damage records
       mark('active')
+      // `inspection` is safe to read here without a ref: kickOffUploads is a
+      // plain function (not stored in a ref), so it is re-created on every
+      // render and always closes over the *current* inspection value from
+      // useInspection state. By the time the user reaches the damage phase,
+      // start() has already resolved and set inspection, so this will never
+      // be null under normal flow.
       if (!inspection) throw new Error('Inspection not found')
       const textOnlyDamages = damages
         .filter(d => !d.photoBlob)
