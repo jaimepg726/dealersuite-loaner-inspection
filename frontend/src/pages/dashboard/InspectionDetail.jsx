@@ -1,11 +1,12 @@
 /**
  * DealerSuite - Inspection Detail Page
  *
- * Phase B improvements:
- *   - AuthDriveImage / fetchDriveBlob imported from shared component
- *   - VideoPlayer uses aspect-video container (no more max-h-56 squish)
- *   - MediaGallery: responsive photo grid, "Walkround Video" label,
- *     photo modal with prev/next navigation, improved empty state
+ * Visual polish pass:
+ *   - VideoPlayer constrained to max-w-sm inside a featured media card
+ *   - MediaGallery: video wrapped in card container with icon header
+ *   - PhotoThumb: rounded-xl for consistency
+ *   - Summary card: colored left accent stripe per inspection type
+ *   - Damage items: refined compact cards with yellow left accent
  */
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -17,7 +18,6 @@ import api from '../../utils/api'
 import AuthDriveImage, { isDriveUrl, fetchDriveBlob } from '../../components/ui/AuthDriveImage'
 
 // ── PhotoThumb ────────────────────────────────────────────────────────────────
-/** Single photo thumbnail — Drive or legacy DB. Clicking opens the modal. */
 function PhotoThumb({ m, onOpen }) {
   const [src,     setSrc]     = useState(null)
   const [loading, setLoading] = useState(true)
@@ -56,35 +56,27 @@ function PhotoThumb({ m, onOpen }) {
     <button
       onClick={() => src && onOpen()}
       disabled={!src}
-      className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
+      className="aspect-square rounded-xl overflow-hidden bg-brand-mid border border-brand-accent
                  hover:border-brand-blue/60 transition-colors relative disabled:cursor-default"
     >
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
-          <Loader className="w-5 h-5 text-brand-blue animate-spin" />
+          <Loader className="w-4 h-4 text-brand-blue animate-spin" />
         </div>
       )}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
-          <WifiOff className="w-5 h-5 text-gray-500" />
+          <WifiOff className="w-4 h-4 text-gray-500" />
         </div>
       )}
       {src && !error && (
-        <img
-          src={src}
-          alt="Inspection photo"
-          className="w-full h-full object-cover"
-        />
+        <img src={src} alt="Inspection photo" className="w-full h-full object-cover" />
       )}
     </button>
   )
 }
 
 // ── PhotoModal ────────────────────────────────────────────────────────────────
-/**
- * Fullscreen photo modal with prev/next navigation.
- * Loads each photo on demand via fetchDriveBlob (or direct src for non-Drive).
- */
 function PhotoModal({ photos, startIdx, onClose }) {
   const [current, setCurrent] = useState(startIdx)
   const [src,     setSrc]     = useState(null)
@@ -96,7 +88,6 @@ function PhotoModal({ photos, startIdx, onClose }) {
     if (!m) return
 
     let cancelled = false
-    // Revoke previous object URL before loading the next one
     if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null }
     setSrc(null)
 
@@ -125,24 +116,22 @@ function PhotoModal({ photos, startIdx, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/92 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      {/* Close */}
       <button
         className="absolute top-4 right-4 w-10 h-10 bg-brand-mid rounded-full
-                   flex items-center justify-center z-10"
+                   flex items-center justify-center z-10 border border-brand-accent"
         onClick={onClose}
         aria-label="Close"
       >
         <X className="w-5 h-5 text-gray-300" />
       </button>
 
-      {/* Prev */}
       {hasPrev && (
         <button
           className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/60 rounded-full
-                     flex items-center justify-center z-10 hover:bg-black/80 transition-colors"
+                     flex items-center justify-center z-10 border border-white/10"
           onClick={(e) => { e.stopPropagation(); setCurrent((c) => c - 1) }}
           aria-label="Previous photo"
         >
@@ -150,11 +139,10 @@ function PhotoModal({ photos, startIdx, onClose }) {
         </button>
       )}
 
-      {/* Next */}
       {hasNext && (
         <button
           className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/60 rounded-full
-                     flex items-center justify-center z-10 hover:bg-black/80 transition-colors"
+                     flex items-center justify-center z-10 border border-white/10"
           onClick={(e) => { e.stopPropagation(); setCurrent((c) => c + 1) }}
           aria-label="Next photo"
         >
@@ -162,23 +150,20 @@ function PhotoModal({ photos, startIdx, onClose }) {
         </button>
       )}
 
-      {/* Image area */}
       <div
         className="flex flex-col items-center gap-3 max-w-full max-h-full"
         onClick={(e) => e.stopPropagation()}
       >
-        {loading && (
-          <Loader className="w-10 h-10 text-brand-blue animate-spin" />
-        )}
+        {loading && <Loader className="w-10 h-10 text-brand-blue animate-spin" />}
         {src && !loading && (
           <img
             src={src}
             alt={`Photo ${current + 1} of ${photos.length}`}
-            className="max-w-full max-h-[80vh] rounded-lg object-contain"
+            className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl"
           />
         )}
         {photos.length > 1 && (
-          <p className="text-gray-400 text-xs font-semibold">
+          <p className="text-gray-400 text-xs font-semibold bg-black/40 px-3 py-1 rounded-full">
             {current + 1} / {photos.length}
           </p>
         )}
@@ -188,7 +173,6 @@ function PhotoModal({ photos, startIdx, onClose }) {
 }
 
 // ── VideoPlayer ───────────────────────────────────────────────────────────────
-/** Single video player — Drive or legacy DB. Uses aspect-video container. */
 function VideoPlayer({ m }) {
   const [src,     setSrc]     = useState(null)
   const [loading, setLoading] = useState(true)
@@ -224,8 +208,7 @@ function VideoPlayer({ m }) {
   }, [m.id, m.file_url])
 
   return (
-    // aspect-video gives a 16:9 container — video fills it cleanly
-    <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative aspect-video w-full">
+    <div className="rounded-xl overflow-hidden bg-black border border-brand-accent relative aspect-video w-full">
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-brand-mid z-10">
           <Loader className="w-6 h-6 text-brand-blue animate-spin" />
@@ -253,16 +236,17 @@ function VideoPlayer({ m }) {
 
 // ── MediaGallery ──────────────────────────────────────────────────────────────
 function MediaGallery({ media, inspectionStatus }) {
-  const [modal, setModal] = useState(null) // { idx: number } or null
+  const [modal, setModal] = useState(null)
 
   const photos = media.filter((m) => m.media_type === 'photo')
   const videos = media.filter((m) => m.media_type === 'video')
 
   if (media.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 py-8 text-center">
-        <Camera className="w-10 h-10 text-brand-accent" strokeWidth={1} />
-        <p className="text-gray-400 text-sm font-semibold">
+      <div className="flex flex-col items-center gap-2 py-10 text-center
+                      bg-brand-mid/40 rounded-2xl border border-brand-accent">
+        <Camera className="w-9 h-9 text-gray-600" strokeWidth={1.5} />
+        <p className="text-gray-500 text-sm font-medium">
           {inspectionStatus === 'Completed'
             ? 'No media was uploaded for this inspection'
             : 'Media will appear here once the inspection is completed'}
@@ -272,29 +256,39 @@ function MediaGallery({ media, inspectionStatus }) {
   }
 
   return (
-    <>
-      {/* Videos — labeled "Walkround Video" when there is exactly one */}
+    <div className="flex flex-col gap-4">
+
+      {/* ── Walkround Video — featured card ───────────────────────────── */}
       {videos.length > 0 && (
-        <div className="mb-4">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+        <div className="rounded-2xl border border-brand-accent overflow-hidden bg-brand-dark/60">
+          {/* Card header */}
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-brand-accent/60
+                          bg-brand-mid/60">
             <Video className="w-3.5 h-3.5 text-brand-blue" />
-            {videos.length === 1 ? 'Walkround Video' : `Videos (${videos.length})`}
-          </p>
-          <div className="flex flex-col gap-3">
+            <span className="text-sm font-bold text-brand-white">
+              {videos.length === 1 ? 'Walkround Video' : `Videos (${videos.length})`}
+            </span>
+          </div>
+          {/* Video player(s) — constrained width so they feel intentional */}
+          <div className="p-3 flex flex-col gap-3">
             {videos.map((m) => (
-              <VideoPlayer key={m.id} m={m} />
+              <div key={m.id} className="max-w-sm mx-auto w-full">
+                <VideoPlayer m={m} />
+              </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Photos — responsive grid */}
+      {/* ── Damage / Inspection Photos ────────────────────────────────── */}
       {photos.length > 0 && (
         <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-            <Camera className="w-3.5 h-3.5" />
-            {`Photos (${photos.length})`}
-          </p>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Camera className="w-3.5 h-3.5 text-gray-500" />
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Photos ({photos.length})
+            </span>
+          </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
             {photos.map((m, i) => (
               <PhotoThumb
@@ -307,7 +301,6 @@ function MediaGallery({ media, inspectionStatus }) {
         </div>
       )}
 
-      {/* Photo modal with prev/next navigation */}
       {modal !== null && (
         <PhotoModal
           photos={photos}
@@ -315,7 +308,7 @@ function MediaGallery({ media, inspectionStatus }) {
           onClose={() => setModal(null)}
         />
       )}
-    </>
+    </div>
   )
 }
 
@@ -326,6 +319,14 @@ const TYPE_COLOR = {
   Inventory: 'bg-purple-900/50 text-purple-400',
   Sales:     'bg-orange-900/50 text-orange-400',
 }
+
+const TYPE_ACCENT = {
+  Checkout:  'bg-brand-blue',
+  Checkin:   'bg-green-500',
+  Inventory: 'bg-purple-500',
+  Sales:     'bg-orange-500',
+}
+
 const STATUS_COLOR = {
   Completed:    'text-green-400',
   'In Progress':'text-yellow-400',
@@ -342,8 +343,8 @@ function formatDate(iso) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function InspectionDetail() {
-  const { id }     = useParams()
-  const navigate   = useNavigate()
+  const { id }   = useParams()
+  const navigate = useNavigate()
   const [inspection, setInspection] = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState(null)
@@ -368,8 +369,8 @@ export default function InspectionDetail() {
     return (
       <div className="p-5 flex flex-col gap-4">
         <div className="h-8 w-32 rounded-lg bg-brand-mid animate-pulse" />
-        <div className="h-24 rounded-xl bg-brand-mid animate-pulse" />
-        <div className="h-40 rounded-xl bg-brand-mid animate-pulse" />
+        <div className="h-28 rounded-2xl bg-brand-mid animate-pulse" />
+        <div className="h-44 rounded-2xl bg-brand-mid animate-pulse" />
       </div>
     )
   }
@@ -388,16 +389,19 @@ export default function InspectionDetail() {
   if (!inspection) return null
 
   const { vehicle, damages = [], media = [] } = inspection
-  const typeCls   = TYPE_COLOR[inspection.inspection_type]  || TYPE_COLOR.Checkout
-  const statusCls = STATUS_COLOR[inspection.status]         || 'text-gray-400'
+  const typeCls    = TYPE_COLOR[inspection.inspection_type]  || TYPE_COLOR.Checkout
+  const typeAccent = TYPE_ACCENT[inspection.inspection_type] || TYPE_ACCENT.Checkout
+  const statusCls  = STATUS_COLOR[inspection.status]         || 'text-gray-400'
 
   return (
-    <div className="flex flex-col pb-8">
+    <div className="flex flex-col pb-10">
+
+      {/* Page header */}
       <div className="px-5 pt-5 pb-3 flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
           className="w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl
-                     flex items-center justify-center active:scale-95"
+                     flex items-center justify-center active:scale-95 transition-transform"
         >
           <ArrowLeft className="w-4 h-4 text-gray-400" />
         </button>
@@ -409,70 +413,84 @@ export default function InspectionDetail() {
         </div>
       </div>
 
-      <div className="px-5 flex flex-col gap-4">
-        {/* Summary card */}
-        <div className="card">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${typeCls}`}>
-              {inspection.inspection_type}
-            </span>
-            <span className={`text-xs font-semibold ${statusCls}`}>
-              ● {inspection.status}
-            </span>
+      <div className="px-5 flex flex-col gap-5">
+
+        {/* ── Summary card — with type accent stripe ──────────────────── */}
+        <div className="bg-brand-mid rounded-2xl border border-brand-accent relative overflow-hidden">
+          <div className={`absolute left-0 inset-y-0 w-1 ${typeAccent}`} />
+          <div className="p-5 pl-6">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${typeCls}`}>
+                {inspection.inspection_type}
+              </span>
+              <span className={`text-xs font-semibold ${statusCls}`}>
+                ● {inspection.status}
+              </span>
+            </div>
+            {vehicle ? (
+              <p className="text-brand-white font-bold text-lg leading-tight">
+                {vehicle.year} {vehicle.make} {vehicle.model}
+                {vehicle.loaner_number && (
+                  <span className="text-gray-500 font-normal text-sm ml-2">
+                    #{vehicle.loaner_number}
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="text-gray-500 text-sm">Vehicle #{inspection.vehicle_id}</p>
+            )}
+            {inspection.inspector_name && (
+              <p className="text-gray-400 text-sm mt-1.5">
+                Inspector: <span className="text-gray-300">{inspection.inspector_name}</span>
+              </p>
+            )}
+            {inspection.notes && (
+              <p className="text-gray-400 text-sm mt-2 pt-2 border-t border-brand-accent">
+                {inspection.notes}
+              </p>
+            )}
           </div>
-          {vehicle ? (
-            <p className="text-brand-white font-bold text-lg leading-tight">
-              {vehicle.year} {vehicle.make} {vehicle.model}
-              {vehicle.loaner_number && (
-                <span className="text-gray-500 font-normal text-sm ml-2">
-                  #{vehicle.loaner_number}
-                </span>
-              )}
-            </p>
-          ) : (
-            <p className="text-gray-500 text-sm">Vehicle #{inspection.vehicle_id}</p>
-          )}
-          {inspection.inspector_name && (
-            <p className="text-gray-400 text-sm mt-1">
-              Inspector: <span className="text-gray-300">{inspection.inspector_name}</span>
-            </p>
-          )}
-          {inspection.notes && (
-            <p className="text-gray-400 text-sm mt-2 border-t border-brand-accent pt-2">
-              {inspection.notes}
-            </p>
-          )}
         </div>
 
-        {/* Damage notes */}
+        {/* ── Damage notes ────────────────────────────────────────────── */}
         {damages.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-gray-300 mb-2 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-300 mb-2.5 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-yellow-500" />
               Damage Notes ({damages.length})
             </h3>
             <div className="flex flex-col gap-2">
               {damages.map((d) => (
-                <div key={d.id} className="card text-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold text-brand-white">{d.location}</p>
-                    {d.photo_url && (
-                      <span className="text-xs text-gray-500 flex items-center gap-1 shrink-0">
-                        <Camera className="w-3 h-3" /> photo
-                      </span>
+                <div
+                  key={d.id}
+                  className="bg-brand-mid rounded-xl border border-brand-accent relative overflow-hidden"
+                >
+                  {/* Yellow left accent on damage items */}
+                  <div className="absolute left-0 inset-y-0 w-0.5 bg-yellow-500/70" />
+                  <div className="p-3 pl-4 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-brand-white">{d.location}</p>
+                      {d.photo_url && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1 shrink-0
+                                         bg-brand-accent px-1.5 py-0.5 rounded-full">
+                          <Camera className="w-3 h-3" /> photo
+                        </span>
+                      )}
+                    </div>
+                    {d.description && (
+                      <p className="text-gray-400 text-xs mt-0.5">{d.description}</p>
+                    )}
+                    {d.repair_order && (
+                      <p className="text-gray-500 text-xs mt-1 font-mono">RO #{d.repair_order}</p>
                     )}
                   </div>
-                  {d.description && <p className="text-gray-400 mt-0.5">{d.description}</p>}
-                  {d.repair_order && (
-                    <p className="text-gray-500 text-xs mt-1">RO: {d.repair_order}</p>
-                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Media */}
+        {/* ── Inspection media ────────────────────────────────────────── */}
         <div>
           <h3 className="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2">
             <Camera className="w-4 h-4 text-brand-blue" />
@@ -480,6 +498,7 @@ export default function InspectionDetail() {
           </h3>
           <MediaGallery media={media} inspectionStatus={inspection.status} />
         </div>
+
       </div>
     </div>
   )

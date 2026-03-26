@@ -4,7 +4,7 @@
  * Manager taps to expand and assign a Repair Order number or update status.
  */
 import { useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, Check, ExternalLink } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, Check, Camera } from 'lucide-react'
 import api from '../../utils/api'
 import AuthDriveImage from '../ui/AuthDriveImage'
 
@@ -52,9 +52,11 @@ export default function DamageCard({ damage, onUpdated }) {
   }
 
   const statusCls = STATUS_STYLE[status] || STATUS_STYLE.Open
+  const photos = damage.media?.filter(m => m.media_type === 'photo' || m.type === 'photo') ?? []
 
   return (
     <div className={`card border transition-colors ${expanded ? 'border-brand-blue/40' : ''}`}>
+
       {/* Summary row — always visible */}
       <button
         className="w-full text-left flex items-start gap-3"
@@ -77,12 +79,17 @@ export default function DamageCard({ damage, onUpdated }) {
             {damage.location || 'Location not specified'}
             {damage.description && ` · ${damage.description.slice(0, 50)}${damage.description.length > 50 ? '…' : ''}`}
           </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${statusCls}`}>
               {status}
             </span>
             {damage.repair_order && (
               <span className="text-xs text-gray-500 font-mono">RO# {damage.repair_order}</span>
+            )}
+            {photos.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                <Camera className="w-3 h-3" /> {photos.length}
+              </span>
             )}
             <span className="text-xs text-gray-600">{formatDate(damage.created_at)}</span>
           </div>
@@ -98,20 +105,27 @@ export default function DamageCard({ damage, onUpdated }) {
       {expanded && (
         <div className="mt-4 pt-4 border-t border-brand-accent flex flex-col gap-4">
 
-          {/* Inspection photos linked to this damage */}
-          {damage.media?.filter(m => m.media_type === 'photo' || m.type === 'photo').length > 0 && (
-            <div className="flex flex-col gap-2">
-              {damage.media
-                .filter(m => m.media_type === 'photo' || m.type === 'photo')
-                .map(m => (
-                  <AuthDriveImage
+          {/* Damage photos — horizontal scroll of square tiles */}
+          {photos.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+                Photos
+              </p>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                {photos.map(m => (
+                  <div
                     key={m.id}
-                    mediaId={m.id}
-                    fileUrl={m.file_url || m.url || ''}
-                    alt="Damage photo"
-                    className="w-full rounded-xl border border-brand-accent object-cover max-h-56"
-                  />
+                    className="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-brand-accent"
+                  >
+                    <AuthDriveImage
+                      mediaId={m.id}
+                      fileUrl={m.file_url || m.url || ''}
+                      alt="Damage photo"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
                 ))}
+              </div>
             </div>
           )}
 
