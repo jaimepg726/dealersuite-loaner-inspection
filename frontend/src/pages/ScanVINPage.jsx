@@ -1,16 +1,16 @@
 /**
  * DealerSuite - Vehicle Identification Page
- * Two methods: VIN Scan (barcode / OCR / manual) | Loaner Number
+ * Loaner number always visible at top; VIN scan methods below.
  *
  * Flow:
- *   1. Porter picks identification method via tab
- *   2. Vehicle found -> inspection created automatically
+ *   1. Porter enters loaner # (fastest path) OR uses VIN scan below
+ *   2. Vehicle found -> navigate to type selection
  *   3. Camera opens immediately (no confirmation screens)
  */
 
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanBarcode, Hash, Camera, Keyboard } from 'lucide-react'
+import { ScanBarcode, Hash, Camera, Keyboard, Loader2 } from 'lucide-react'
 
 import PageHeader          from '../components/ui/PageHeader'
 import LoadingScreen       from '../components/ui/LoadingScreen'
@@ -18,11 +18,6 @@ import BarcodeScanner      from '../components/inspection/BarcodeScanner'
 import OCRScanner          from '../components/inspection/OCRScanner'
 import ManualVINEntry      from '../components/inspection/ManualVINEntry'
 import useVehicleLookup    from '../hooks/useVehicleLookup'
-
-const MAIN_TABS = [
-  { id: 'vin',    label: 'VIN Scan',      Icon: ScanBarcode },
-  { id: 'loaner', label: 'Loaner Number', Icon: Hash        },
-]
 
 const VIN_METHODS = [
   { id: 'barcode', label: 'Barcode', Icon: ScanBarcode },
@@ -32,14 +27,13 @@ const VIN_METHODS = [
 
 export default function ScanVINPage() {
   const navigate  = useNavigate()
-  const [tab,         setTab]         = useState('vin')
   const [vinMethod,   setVinMethod]   = useState('barcode')
   const [scanned,     setScanned]     = useState(null)
   const [loanerInput, setLoanerInput] = useState('')
+  const [loanerLoading, setLoanerLoading] = useState(false)
 
   const { loading, error, lookup, lookupByLoaner, reset } = useVehicleLookup()
 
-  // Navigate to type selection so porter can choose Checkout, Check-In, etc.
   function openCamera(vehicle) {
     navigate('/select-type', { state: { vehicle } })
   }
@@ -57,18 +51,17 @@ export default function ScanVINPage() {
     const val = loanerInput.trim()
     if (!val) return
     setScanned(val)
-    const vehicle = await lookupByLoaner(val)
-    if (vehicle) openCamera(vehicle)
+    setLoanerLoading(true)
+    try {
+      const vehicle = await lookupByLoaner(val)
+      if (vehicle) openCamera(vehicle)
+    } finally {
+      setLoanerLoading(false)
+    }
   }
 
-  // Reset on tab change
-  function handleTabChange(id) {
-    setTab(id)
-    setScanned(null)
-    reset()
-  }
-
-  if (loading) return <LoadingScreen message={`Looking up ${scanned}…`} />
+  // Full-page loading only for VIN scanner lookups (barcode/OCR/manual)
+  if (loading && !loanerLoading) return <LoadingScreen message={`Looking up ${scanned}…`} />
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
@@ -93,102 +86,98 @@ export default function ScanVINPage() {
           </div>
         )}
 
-        {/* Main tabs: VIN Scan | Loaner Number */}
-        <div className="flex bg-brand-mid rounded-2xl p-1 border border-brand-accent">
-          {MAIN_TABS.map(({ id, label, Icon }) => (
+        {/* ── Loaner Number — always visible at top ────────────────────── */}
+        <div className="flex flex-col gap-3">
+          <div>
+            <h3 className="text-brand-white font-extrabold text-base flex items-center gap-2">
+              <Hash className="w-5 h-5 text-brand-blue" />
+              Loaner Number
+            </h3>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Enter the number printed on the key tag or dashboard sticker
+            </p>
+          </div>
+          <form onSubmit={lookupVehicleByLoanerNumber} className="flex flex-col gap-3">
+            <input
+              type="text"
+              value={loanerInput}
+              onChange={(e) => setLoanerInput(e.target.value)}
+              placeholder="Enter Loaner #"
+              disabled={loanerLoading}
+              className="w-full bg-brand-mid border border-brand-accent rounded-2xl
+                         px-4 py-4 text-brand-white text-xl font-bold text-center
+                         placeholder:text-gray-600 focus:outline-none focus:border-brand-blue
+                         disabled:opacity-60 transition-colors"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={!loanerInput.trim() || loanerLoading}
+              className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loanerLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Hash className="w-5 h-5" />
+              )}
+              {loanerLoading ? 'Looking up…' : 'Look Up Loaner'}
+            </button>
+          </form>
+        </div>
+
+        {/* ── Divider ───────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-brand-accent" />
+          <span className="text-gray-600 text-xs font-semibold tracking-widest uppercase">
+            or scan VIN
+          </span>
+          <div className="flex-1 h-px bg-brand-accent" />
+        </div>
+
+        {/* ── VIN method sub-tabs ───────────────────────────────────────── */}
+        <div className="flex gap-2">
+          {VIN_METHODS.map(({ id, label, Icon }) => (
             <button
               key={id}
-              onClick={() => handleTabChange(id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl
-                           text-sm font-bold transition-colors
-                           ${tab === id
-                             ? 'bg-brand-blue text-white shadow'
-                             : 'text-gray-400'}`}
+              onClick={() => { setVinMethod(id); setScanned(null); reset() }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
+                           text-xs font-bold transition-colors border
+                           ${vinMethod === id
+                             ? 'bg-brand-blue/20 border-brand-blue text-brand-blue'
+                             : 'border-brand-accent text-gray-500'}`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-3.5 h-3.5" />
               {label}
             </button>
           ))}
         </div>
 
-        {/* VIN Scan tab */}
-        {tab === 'vin' && (
-          <>
-            {/* VIN method sub-tabs */}
-            <div className="flex gap-2">
-              {VIN_METHODS.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => { setVinMethod(id); setScanned(null); reset() }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
-                               text-xs font-bold transition-colors border
-                               ${vinMethod === id
-                                 ? 'bg-brand-blue/20 border-brand-blue text-brand-blue'
-                                 : 'border-brand-accent text-gray-500'}`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {vinMethod === 'barcode' && (
-              <div className="flex flex-col gap-3">
-                <p className="text-gray-400 text-sm text-center">
-                  Point rear camera at the VIN barcode on the windshield or door jamb
-                </p>
-                <BarcodeScanner
-                  onDetected={handleVINDetected}
-                  active={tab === 'vin' && vinMethod === 'barcode'}
-                />
-              </div>
-            )}
-
-            {vinMethod === 'ocr' && (
-              <div className="flex flex-col gap-3">
-                <p className="text-gray-400 text-sm text-center">
-                  Point at the VIN number on the dashboard or door sticker, then tap Scan
-                </p>
-                <OCRScanner
-                  onDetected={handleVINDetected}
-                  active={tab === 'vin' && vinMethod === 'ocr'}
-                />
-              </div>
-            )}
-
-            {vinMethod === 'manual' && (
-              <ManualVINEntry onDetected={handleVINDetected} />
-            )}
-          </>
-        )}
-
-        {/* Loaner Number tab */}
-        {tab === 'loaner' && (
+        {vinMethod === 'barcode' && (
           <div className="flex flex-col gap-3">
             <p className="text-gray-400 text-sm text-center">
-              Enter the loaner number printed on the key tag or dashboard sticker
+              Point rear camera at the VIN barcode on the windshield or door jamb
             </p>
-            <form onSubmit={lookupVehicleByLoanerNumber} className="flex flex-col gap-3">
-              <input
-                type="text"
-                value={loanerInput}
-                onChange={(e) => setLoanerInput(e.target.value)}
-                placeholder="Enter Loaner #"
-                className="w-full bg-brand-mid border border-brand-accent rounded-2xl
-                           px-4 py-4 text-brand-white text-lg font-bold text-center
-                           placeholder:text-gray-600 focus:outline-none focus:border-brand-blue"
-                autoFocus
-              />
-              <button
-                type="submit"
-                disabled={!loanerInput.trim()}
-                className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Hash className="w-5 h-5" />
-                Look Up Loaner
-              </button>
-            </form>
+            <BarcodeScanner
+              onDetected={handleVINDetected}
+              active={vinMethod === 'barcode' && !loanerLoading}
+            />
           </div>
+        )}
+
+        {vinMethod === 'ocr' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-gray-400 text-sm text-center">
+              Point at the VIN number on the dashboard or door sticker, then tap Scan
+            </p>
+            <OCRScanner
+              onDetected={handleVINDetected}
+              active={vinMethod === 'ocr' && !loanerLoading}
+            />
+          </div>
+        )}
+
+        {vinMethod === 'manual' && (
+          <ManualVINEntry onDetected={handleVINDetected} />
         )}
 
       </main>

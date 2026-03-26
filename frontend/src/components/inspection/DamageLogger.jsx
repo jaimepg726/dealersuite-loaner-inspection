@@ -276,7 +276,7 @@ export default function DamageLogger({ capturedPhotos = [], onComplete, onSkip }
       {/* Action buttons */}
       <div className="flex flex-col gap-3 pt-2">
         {hasItems && (
-          <button onClick={handleSubmit} className="btn-danger">
+          <button onClick={handleSubmit} className="btn-primary">
             <AlertTriangle className="w-5 h-5" />
             Submit {items.length} Damage Report{items.length !== 1 ? 's' : ''}
           </button>

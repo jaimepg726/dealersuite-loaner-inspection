@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, Check, ExternalLink } from 'lucide-react'
 import api from '../../utils/api'
+import AuthDriveImage from '../ui/AuthDriveImage'
 
 const STATUS_OPTIONS = ['Open', 'RO Assigned', 'In Repair', 'Repaired', 'Waived']
 
@@ -103,9 +104,10 @@ export default function DamageCard({ damage, onUpdated }) {
               {damage.media
                 .filter(m => m.media_type === 'photo' || m.type === 'photo')
                 .map(m => (
-                  <img
+                  <AuthDriveImage
                     key={m.id}
-                    src={m.file_url || m.url}
+                    mediaId={m.id}
+                    fileUrl={m.file_url || m.url || ''}
                     alt="Damage photo"
                     className="w-full rounded-xl border border-brand-accent object-cover max-h-56"
                   />

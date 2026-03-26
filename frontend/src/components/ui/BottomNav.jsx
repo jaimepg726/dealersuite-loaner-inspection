@@ -30,8 +30,12 @@ export default function BottomNav() {
             }`
           }
         >
-          <Icon className="w-6 h-6" strokeWidth={isActive => isActive ? 2.5 : 1.8} />
-          {label}
+          {({ isActive }) => (
+            <>
+              <Icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 1.8} />
+              {label}
+            </>
+          )}
         </NavLink>
       ))}
     </nav>

@@ -4,7 +4,7 @@
  * Tapping navigates to InspectionDetail; Drive link opens externally.
  */
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, Camera, AlertTriangle } from 'lucide-react'
+import { ExternalLink, Camera, Video, AlertTriangle } from 'lucide-react'
 
 const TYPE_COLOR = {
   Checkout:  'bg-brand-blue/20 text-brand-blue',
@@ -67,6 +67,11 @@ export default function InspectionCard({ inspection }) {
           </div>
 
           <div className="flex items-center gap-3 mt-1">
+            {inspection.video_count > 0 && (
+              <span className="flex items-center gap-1 text-xs text-brand-blue">
+                <Video className="w-3 h-3" /> {inspection.video_count}
+              </span>
+            )}
             {inspection.photo_count > 0 && (
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Camera className="w-3 h-3" /> {inspection.photo_count}

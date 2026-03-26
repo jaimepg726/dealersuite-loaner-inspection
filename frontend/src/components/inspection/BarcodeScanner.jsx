@@ -121,7 +121,7 @@ export default function BarcodeScanner({ onDetected, active = true }) {
   }
 
   return (
-    <div className="relative w-full aspect-[3/4] max-w-sm mx-auto overflow-hidden rounded-2xl bg-black">
+    <div className="relative w-full aspect-[4/3] max-w-sm mx-auto overflow-hidden rounded-2xl bg-black">
 
       {/* Live camera feed */}
       <video

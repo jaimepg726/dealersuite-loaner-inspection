@@ -4,7 +4,7 @@ DealerSuite — Inspection Pydantic Schemas
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from schemas.damage import DamageResponse
 
@@ -92,11 +92,26 @@ class InspectionSummary(BaseModel):
     inspection_type:  str
     status:           str
     inspector_name:   Optional[str]    = None
-    photo_count:      int
+    photo_count:      int              = 0
+    video_count:      int              = 0
     drive_folder_url: Optional[str]    = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
     vehicle:          Optional[VehicleBrief] = None
+
+    # Loaded for video_count computation only — excluded from the API response.
+    # Populated when list_inspections eager-loads Inspection.media.
+    media: list = Field(default=[], exclude=True)
+
+    @model_validator(mode='after')
+    def _compute_video_count(self):
+        """Count non-pending video records from the loaded media relationship."""
+        self.video_count = sum(
+            1 for m in self.media
+            if getattr(m, 'media_type', '') == 'video'
+            and getattr(m, 'file_url', 'pending') != 'pending'
+        )
+        return self
 
     class Config:
         from_attributes = True

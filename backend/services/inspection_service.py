@@ -127,7 +127,10 @@ async def list_inspections(
 
     query = (
         query
-        .options(selectinload(Inspection.vehicle))
+        .options(
+            selectinload(Inspection.vehicle),
+            selectinload(Inspection.media),   # needed for video_count in InspectionSummary
+        )
         .order_by(Inspection.started_at.desc())
         .offset(skip)
         .limit(limit)

@@ -1,53 +1,27 @@
 /**
  * DealerSuite - Inspection Detail Page
- * Media components updated to fetch Drive files directly from Google,
- * bypassing Railway entirely. Uses createObjectURL so <img>/<video> work
- * with authenticated Drive API requests.
+ *
+ * Phase B improvements:
+ *   - AuthDriveImage / fetchDriveBlob imported from shared component
+ *   - VideoPlayer uses aspect-video container (no more max-h-56 squish)
+ *   - MediaGallery: responsive photo grid, "Walkround Video" label,
+ *     photo modal with prev/next navigation, improved empty state
  */
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Video, AlertTriangle, X, Loader, WifiOff } from 'lucide-react'
+import {
+  ArrowLeft, Camera, Video, AlertTriangle,
+  X, Loader, WifiOff, ChevronLeft, ChevronRight,
+} from 'lucide-react'
 import api from '../../utils/api'
+import AuthDriveImage, { isDriveUrl, fetchDriveBlob } from '../../components/ui/AuthDriveImage'
 
-/** Returns true if URL points to Google Drive */
-function isDriveUrl(url) {
-  return url && url.includes('drive.google.com')
-}
-
-/** Extract Drive file ID from any Drive URL format */
-function extractDriveFileId(url) {
-  if (!url) return null
-  const m1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/)
-  if (m1) return m1[1]
-  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
-  if (m2) return m2[1]
-  return null
-}
-
-/**
- * Fetch a Drive-backed media record directly from Google.
- * 1. GET /api/media/{id}/drive-token  (Railway — tiny JSON, no bytes)
- * 2. fetch(drive_url, Authorization header)  (browser → Google directly)
- * 3. createObjectURL(blob)
- * Railway never touches the media bytes.
- */
-async function fetchDriveBlob(mediaId) {
-  const { data } = await api.get(`/api/media/${mediaId}/drive-token`)
-  // Use raw fetch — NOT the api instance — so we don't send the DealerSuite
-  // JWT to Google and don't prepend the Railway base URL.
-  const resp = await fetch(data.drive_url, {
-    headers: { Authorization: `Bearer ${data.access_token}` }
-  })
-  if (!resp.ok) throw new Error(`Drive fetch failed: ${resp.status}`)
-  const blob = await resp.blob()
-  return { objectUrl: URL.createObjectURL(blob), mimeType: data.mime_type }
-}
-
-/** Single photo thumbnail — Drive or legacy DB */
+// ── PhotoThumb ────────────────────────────────────────────────────────────────
+/** Single photo thumbnail — Drive or legacy DB. Clicking opens the modal. */
 function PhotoThumb({ m, onOpen }) {
-  const [src, setSrc] = useState(null)
+  const [src,     setSrc]     = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [error,   setError]   = useState(false)
   const objUrlRef = useRef(null)
 
   useEffect(() => {
@@ -68,7 +42,6 @@ function PhotoThumb({ m, onOpen }) {
           if (!cancelled) { setError(true); setLoading(false) }
         })
     } else {
-      // Legacy DB record — plain src, no auth needed
       setSrc(m.file_url)
       setLoading(false)
     }
@@ -81,8 +54,10 @@ function PhotoThumb({ m, onOpen }) {
 
   return (
     <button
-      onClick={() => src && onOpen(src)}
-      className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent hover:border-brand-blue/60 transition-colors relative"
+      onClick={() => src && onOpen()}
+      disabled={!src}
+      className="aspect-square rounded-lg overflow-hidden bg-brand-mid border border-brand-accent
+                 hover:border-brand-blue/60 transition-colors relative disabled:cursor-default"
     >
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-brand-mid">
@@ -99,18 +74,125 @@ function PhotoThumb({ m, onOpen }) {
           src={src}
           alt="Inspection photo"
           className="w-full h-full object-cover"
-          onLoad={() => setLoading(false)}
         />
       )}
     </button>
   )
 }
 
-/** Single video player — Drive or legacy DB */
+// ── PhotoModal ────────────────────────────────────────────────────────────────
+/**
+ * Fullscreen photo modal with prev/next navigation.
+ * Loads each photo on demand via fetchDriveBlob (or direct src for non-Drive).
+ */
+function PhotoModal({ photos, startIdx, onClose }) {
+  const [current, setCurrent] = useState(startIdx)
+  const [src,     setSrc]     = useState(null)
+  const [loading, setLoading] = useState(false)
+  const objUrlRef = useRef(null)
+
+  useEffect(() => {
+    const m = photos[current]
+    if (!m) return
+
+    let cancelled = false
+    // Revoke previous object URL before loading the next one
+    if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null }
+    setSrc(null)
+
+    if (isDriveUrl(m.file_url)) {
+      setLoading(true)
+      fetchDriveBlob(m.id)
+        .then(({ objectUrl }) => {
+          if (cancelled) { URL.revokeObjectURL(objectUrl); return }
+          objUrlRef.current = objectUrl
+          setSrc(objectUrl)
+          setLoading(false)
+        })
+        .catch(() => { if (!cancelled) setLoading(false) })
+    } else {
+      setSrc(m.file_url)
+    }
+
+    return () => {
+      cancelled = true
+      if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null }
+    }
+  }, [current]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasPrev = current > 0
+  const hasNext = current < photos.length - 1
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Close */}
+      <button
+        className="absolute top-4 right-4 w-10 h-10 bg-brand-mid rounded-full
+                   flex items-center justify-center z-10"
+        onClick={onClose}
+        aria-label="Close"
+      >
+        <X className="w-5 h-5 text-gray-300" />
+      </button>
+
+      {/* Prev */}
+      {hasPrev && (
+        <button
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/60 rounded-full
+                     flex items-center justify-center z-10 hover:bg-black/80 transition-colors"
+          onClick={(e) => { e.stopPropagation(); setCurrent((c) => c - 1) }}
+          aria-label="Previous photo"
+        >
+          <ChevronLeft className="w-6 h-6 text-white" />
+        </button>
+      )}
+
+      {/* Next */}
+      {hasNext && (
+        <button
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/60 rounded-full
+                     flex items-center justify-center z-10 hover:bg-black/80 transition-colors"
+          onClick={(e) => { e.stopPropagation(); setCurrent((c) => c + 1) }}
+          aria-label="Next photo"
+        >
+          <ChevronRight className="w-6 h-6 text-white" />
+        </button>
+      )}
+
+      {/* Image area */}
+      <div
+        className="flex flex-col items-center gap-3 max-w-full max-h-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {loading && (
+          <Loader className="w-10 h-10 text-brand-blue animate-spin" />
+        )}
+        {src && !loading && (
+          <img
+            src={src}
+            alt={`Photo ${current + 1} of ${photos.length}`}
+            className="max-w-full max-h-[80vh] rounded-lg object-contain"
+          />
+        )}
+        {photos.length > 1 && (
+          <p className="text-gray-400 text-xs font-semibold">
+            {current + 1} / {photos.length}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── VideoPlayer ───────────────────────────────────────────────────────────────
+/** Single video player — Drive or legacy DB. Uses aspect-video container. */
 function VideoPlayer({ m }) {
-  const [src, setSrc] = useState(null)
+  const [src,     setSrc]     = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [error,   setError]   = useState(false)
   const objUrlRef = useRef(null)
 
   useEffect(() => {
@@ -142,17 +224,16 @@ function VideoPlayer({ m }) {
   }, [m.id, m.file_url])
 
   return (
-    <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative">
+    // aspect-video gives a 16:9 container — video fills it cleanly
+    <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent relative aspect-video w-full">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-brand-mid z-10 min-h-32">
-          <div className="flex flex-col items-center gap-2">
-            <Loader className="w-6 h-6 text-brand-blue animate-spin" />
-            <span className="text-xs text-gray-500">Loading video…</span>
-          </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-brand-mid z-10">
+          <Loader className="w-6 h-6 text-brand-blue animate-spin" />
+          <span className="text-xs text-gray-500">Loading video…</span>
         </div>
       )}
       {error && (
-        <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
+        <div className="absolute inset-0 flex items-center justify-center gap-2 text-gray-500">
           <WifiOff className="w-5 h-5" />
           <span className="text-sm">Could not load video</span>
         </div>
@@ -162,7 +243,7 @@ function VideoPlayer({ m }) {
           src={src}
           controls
           preload="metadata"
-          className="w-full max-h-56 object-contain"
+          className="w-full h-full object-contain"
           onLoadedMetadata={() => setLoading(false)}
         />
       )}
@@ -170,8 +251,10 @@ function VideoPlayer({ m }) {
   )
 }
 
-function MediaGallery({ media }) {
-  const [modalSrc, setModalSrc] = useState(null)
+// ── MediaGallery ──────────────────────────────────────────────────────────────
+function MediaGallery({ media, inspectionStatus }) {
+  const [modal, setModal] = useState(null) // { idx: number } or null
+
   const photos = media.filter((m) => m.media_type === 'photo')
   const videos = media.filter((m) => m.media_type === 'video')
 
@@ -179,29 +262,23 @@ function MediaGallery({ media }) {
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-center">
         <Camera className="w-10 h-10 text-brand-accent" strokeWidth={1} />
-        <p className="text-gray-400 text-sm font-semibold">No photos or videos uploaded yet</p>
+        <p className="text-gray-400 text-sm font-semibold">
+          {inspectionStatus === 'Completed'
+            ? 'No media was uploaded for this inspection'
+            : 'Media will appear here once the inspection is completed'}
+        </p>
       </div>
     )
   }
 
   return (
     <>
-      {photos.length > 0 && (
-        <div className="mb-4">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-            Photos ({photos.length})
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {photos.map((m) => (
-              <PhotoThumb key={m.id} m={m} onOpen={(s) => setModalSrc(s)} />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Videos — labeled "Walkround Video" when there is exactly one */}
       {videos.length > 0 && (
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-            Videos ({videos.length})
+        <div className="mb-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Video className="w-3.5 h-3.5 text-brand-blue" />
+            {videos.length === 1 ? 'Walkround Video' : `Videos (${videos.length})`}
           </p>
           <div className="flex flex-col gap-3">
             {videos.map((m) => (
@@ -210,29 +287,39 @@ function MediaGallery({ media }) {
           </div>
         </div>
       )}
-      {modalSrc && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setModalSrc(null)}
-        >
-          <button
-            className="absolute top-4 right-4 w-10 h-10 bg-brand-mid rounded-full flex items-center justify-center"
-            onClick={() => setModalSrc(null)}
-          >
-            <X className="w-5 h-5 text-gray-300" />
-          </button>
-          <img
-            src={modalSrc}
-            alt="Full size"
-            className="max-w-full max-h-full rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+
+      {/* Photos — responsive grid */}
+      {photos.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Camera className="w-3.5 h-3.5" />
+            {`Photos (${photos.length})`}
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+            {photos.map((m, i) => (
+              <PhotoThumb
+                key={m.id}
+                m={m}
+                onOpen={() => setModal({ idx: i })}
+              />
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Photo modal with prev/next navigation */}
+      {modal !== null && (
+        <PhotoModal
+          photos={photos}
+          startIdx={modal.idx}
+          onClose={() => setModal(null)}
+        />
       )}
     </>
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const TYPE_COLOR = {
   Checkout:  'bg-brand-blue/20 text-brand-blue',
   Checkin:   'bg-green-900/50 text-green-400',
@@ -240,7 +327,7 @@ const TYPE_COLOR = {
   Sales:     'bg-orange-900/50 text-orange-400',
 }
 const STATUS_COLOR = {
-  Completed:   'text-green-400',
+  Completed:    'text-green-400',
   'In Progress':'text-yellow-400',
   Failed:       'text-red-400',
 }
@@ -253,12 +340,13 @@ function formatDate(iso) {
   })
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function InspectionDetail() {
-  const { id } = useParams()
-  const navigate = useNavigate()
+  const { id }     = useParams()
+  const navigate   = useNavigate()
   const [inspection, setInspection] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -300,15 +388,16 @@ export default function InspectionDetail() {
   if (!inspection) return null
 
   const { vehicle, damages = [], media = [] } = inspection
-  const typeCls = TYPE_COLOR[inspection.inspection_type] || TYPE_COLOR.Checkout
-  const statusCls = STATUS_COLOR[inspection.status] || 'text-gray-400'
+  const typeCls   = TYPE_COLOR[inspection.inspection_type]  || TYPE_COLOR.Checkout
+  const statusCls = STATUS_COLOR[inspection.status]         || 'text-gray-400'
 
   return (
     <div className="flex flex-col pb-8">
       <div className="px-5 pt-5 pb-3 flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
-          className="w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl flex items-center justify-center active:scale-95"
+          className="w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl
+                     flex items-center justify-center active:scale-95"
         >
           <ArrowLeft className="w-4 h-4 text-gray-400" />
         </button>
@@ -321,12 +410,15 @@ export default function InspectionDetail() {
       </div>
 
       <div className="px-5 flex flex-col gap-4">
+        {/* Summary card */}
         <div className="card">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${typeCls}`}>
               {inspection.inspection_type}
             </span>
-            <span className={`text-xs font-semibold ${statusCls}`}>● {inspection.status}</span>
+            <span className={`text-xs font-semibold ${statusCls}`}>
+              ● {inspection.status}
+            </span>
           </div>
           {vehicle ? (
             <p className="text-brand-white font-bold text-lg leading-tight">
@@ -352,6 +444,7 @@ export default function InspectionDetail() {
           )}
         </div>
 
+        {/* Damage notes */}
         {damages.length > 0 && (
           <div>
             <h3 className="text-sm font-bold text-gray-300 mb-2 flex items-center gap-2">
@@ -361,21 +454,31 @@ export default function InspectionDetail() {
             <div className="flex flex-col gap-2">
               {damages.map((d) => (
                 <div key={d.id} className="card text-sm">
-                  <p className="font-semibold text-brand-white">{d.location}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-brand-white">{d.location}</p>
+                    {d.photo_url && (
+                      <span className="text-xs text-gray-500 flex items-center gap-1 shrink-0">
+                        <Camera className="w-3 h-3" /> photo
+                      </span>
+                    )}
+                  </div>
                   {d.description && <p className="text-gray-400 mt-0.5">{d.description}</p>}
-                  {d.repair_order && <p className="text-gray-500 text-xs mt-1">RO: {d.repair_order}</p>}
+                  {d.repair_order && (
+                    <p className="text-gray-500 text-xs mt-1">RO: {d.repair_order}</p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Media */}
         <div>
           <h3 className="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2">
             <Camera className="w-4 h-4 text-brand-blue" />
             Inspection Media
           </h3>
-          <MediaGallery media={media} />
+          <MediaGallery media={media} inspectionStatus={inspection.status} />
         </div>
       </div>
     </div>
