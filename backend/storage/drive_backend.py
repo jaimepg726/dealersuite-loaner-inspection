@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 
 DRIVE_FILE_BASE = "https://drive.google.com/uc?id={}&export=view"
 UPLOAD_TIMEOUT = 30
-   # seconds
+FOLDER_TIMEOUT = 10   # seconds — max wait for Drive folder API calls
+
+# Module-level in-memory folder cache.
+# Eliminates repeated DB + Drive API lookups on every upload-session call.
+# Populated on first successful _ensure_folders(). Cleared on app restart.
+_folder_cache: dict = {}  # {"root": id, "inspections": id, "damage": id}
 ROOT_FOLDER = "DealerSuite Loaner Inspections"
 
 
@@ -105,10 +110,9 @@ class GoogleDriveBackend(StorageBackend):
                 logger.warning("Drive: token expired and no refresh_token")
                 return None
 
-            # Refresh using httpx if needed
             if refresh_token and (token_expired or near_expiry):
                 import httpx as _httpx
-                async with _httpx.AsyncClient() as client:
+                async with _httpx.AsyncClient(timeout=10) as client:
                     resp = await client.post(
                         "https://oauth2.googleapis.com/token",
                         data={
@@ -174,7 +178,6 @@ class GoogleDriveBackend(StorageBackend):
                 client_secret=cfg.google_client_secret,
                 expiry=expiry,
             )
-            # Force UTC-aware expiry to prevent google-auth TypeError
             if creds.expiry and creds.expiry.tzinfo is None:
                 creds.expiry = creds.expiry.replace(tzinfo=timezone.utc)
             if hasattr(creds, '_expiry') and creds._expiry and creds._expiry.tzinfo is None:
@@ -203,7 +206,22 @@ class GoogleDriveBackend(StorageBackend):
         return (await self._get_access_token()) is not None
 
     async def _ensure_folders(self) -> dict:
-        """Get or create Drive folder hierarchy using httpx."""
+        """Get or create Drive folder hierarchy using httpx.
+
+        Speed optimisation (3-layer cache):
+          1. Module-level _folder_cache — fastest, no I/O (cleared on restart)
+          2. DB settings table — survives restarts, one DB round-trip
+          3. Drive API — only on very first run or after manual folder deletion
+
+        All Drive API calls use FOLDER_TIMEOUT to prevent the cold-start hang
+        that was causing 15-20s delays on the first upload-session of the day.
+        """
+        global _folder_cache
+
+        # Layer 1: in-memory cache hit — zero I/O
+        if _folder_cache.get("root") and _folder_cache.get("inspections") and _folder_cache.get("damage"):
+            return _folder_cache
+
         from services.settings_service import (
             get_setting, set_setting,
             KEY_DRIVE_ROOT_FOLDER_ID, KEY_DRIVE_INSP_FOLDER_ID,
@@ -211,24 +229,28 @@ class GoogleDriveBackend(StorageBackend):
         )
         import httpx
 
+        # Layer 2: DB cache hit — one round-trip
         root_id = await get_setting(self._db, KEY_DRIVE_ROOT_FOLDER_ID)
         insp_id = await get_setting(self._db, KEY_DRIVE_INSP_FOLDER_ID)
-        dmg_id = await get_setting(self._db, KEY_DRIVE_DMG_FOLDER_ID)
+        dmg_id  = await get_setting(self._db, KEY_DRIVE_DMG_FOLDER_ID)
 
         if root_id and insp_id and dmg_id:
-            return {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+            _folder_cache = {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+            return _folder_cache
 
+        # Layer 3: Drive API (first run only)
         token = await self._get_access_token()
         if not token:
             raise RuntimeError("No valid Drive credentials")
 
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        timeout = httpx.Timeout(FOLDER_TIMEOUT)
 
         async def find_or_create(name, parent_id=None):
             q = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and trashed=false"
             if parent_id:
                 q += f" and '{parent_id}' in parents"
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.get(
                     f"{self.DRIVE_API}/files",
                     params={"q": q, "fields": "files(id)", "pageSize": 1},
@@ -240,7 +262,7 @@ class GoogleDriveBackend(StorageBackend):
             body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
             if parent_id:
                 body["parents"] = [parent_id]
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.post(
                     f"{self.DRIVE_API}/files",
                     json=body,
@@ -253,7 +275,7 @@ class GoogleDriveBackend(StorageBackend):
 
         root_id = await find_or_create(ROOT_FOLDER)
         insp_id = await find_or_create("inspections", root_id)
-        dmg_id = await find_or_create("damage", root_id)
+        dmg_id  = await find_or_create("damage", root_id)
 
         await set_setting(self._db, KEY_DRIVE_ROOT_FOLDER_ID, root_id)
         await set_setting(self._db, KEY_DRIVE_INSP_FOLDER_ID, insp_id)
@@ -262,7 +284,8 @@ class GoogleDriveBackend(StorageBackend):
         await self._db.commit()
         logger.info("Drive: folders ready — root=%s insp=%s dmg=%s", root_id, insp_id, dmg_id)
 
-        return {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+        _folder_cache = {"root": root_id, "inspections": insp_id, "damage": dmg_id}
+        return _folder_cache
 
     def _build_service(self, creds):
         from googleapiclient.discovery import build
@@ -286,7 +309,6 @@ class GoogleDriveBackend(StorageBackend):
             headers_auth = {"Authorization": f"Bearer {token}"}
 
             async def _do_upload():
-                # Multipart upload
                 import json as _json
                 boundary = f"boundary_{secrets.token_hex(8)}"
                 meta = _json.dumps({"name": filename, "parents": [folder_id]}).encode()
@@ -312,7 +334,6 @@ class GoogleDriveBackend(StorageBackend):
                 if r.status_code not in (200, 201):
                     raise RuntimeError(f"Upload failed {r.status_code}: {r.text[:200]}")
                 fid = r.json()["id"]
-                # Make public
                 async with httpx.AsyncClient(timeout=10) as client:
                     await client.post(
                         f"{self.DRIVE_API}/files/{fid}/permissions",
