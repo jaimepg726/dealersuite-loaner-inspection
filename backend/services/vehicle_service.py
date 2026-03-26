@@ -53,16 +53,7 @@ async def get_vehicle_by_vin(db: AsyncSession, vin: str) -> Vehicle:
     result = await db.execute(select(Vehicle).where(Vehicle.vin == vin))
     vehicle = result.scalar_one_or_none()
     if not vehicle:
-        # Auto-create as unknown vehicle so inspections can still be recorded
-        # for service vehicles, sales vehicles, and customer vehicles.
-        vehicle = Vehicle(
-            vin=vin,
-            vehicle_type="Unknown",
-            status="Active",
-            is_active=True,
-        )
-        db.add(vehicle)
-        await db.flush()
+        raise HTTPException(status_code=404, detail="Vehicle not found")
     return vehicle
 
 
