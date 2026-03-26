@@ -10,7 +10,7 @@
 
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanBarcode, Hash, Camera, Keyboard, Loader2 } from 'lucide-react'
+import { ScanBarcode, Hash, Camera, Keyboard, Loader2, Video } from 'lucide-react'
 
 import PageHeader          from '../components/ui/PageHeader'
 import LoadingScreen       from '../components/ui/LoadingScreen'
@@ -32,7 +32,7 @@ export default function ScanVINPage() {
   const [loanerInput, setLoanerInput] = useState('')
   const [loanerLoading, setLoanerLoading] = useState(false)
 
-  const { loading, error, lookup, lookupByLoaner, reset } = useVehicleLookup()
+  const { loading, error, notFound, lookup, lookupByLoaner, reset } = useVehicleLookup()
 
   function openCamera(vehicle) {
     navigate('/select-type', { state: { vehicle } })
@@ -73,8 +73,37 @@ export default function ScanVINPage() {
 
       <main className="flex-1 flex flex-col px-5 pb-10 gap-5">
 
-        {/* Error banner */}
-        {error && (
+        {/* VIN not found — offer condition video continuation */}
+        {notFound && scanned && (
+          <div className="relative overflow-hidden bg-brand-mid border border-teal-700/60 rounded-2xl px-5 py-4">
+            <div className="absolute left-0 inset-y-0 w-1 bg-teal-500 rounded-l-2xl" />
+            <p className="text-teal-300 font-extrabold text-sm">
+              Vehicle not found in loaner fleet
+            </p>
+            <p className="text-gray-400 text-xs mt-0.5 font-mono tracking-wider">{scanned}</p>
+            <p className="text-gray-400 text-xs mt-2">
+              You can still record a condition video to document this vehicle's current state.
+            </p>
+            <button
+              onClick={() => navigate('/inspect/condition/0', { state: { conditionVin: scanned } })}
+              className="mt-3 w-full flex items-center justify-center gap-2 bg-teal-700 hover:bg-teal-600
+                         active:scale-[0.98] transition-all text-white font-bold text-sm
+                         rounded-xl py-3 px-4"
+            >
+              <Video className="w-4 h-4" />
+              Continue as Condition Video
+            </button>
+            <button
+              onClick={() => { setScanned(null); reset() }}
+              className="mt-2 w-full text-gray-500 text-xs underline"
+            >
+              Try a different VIN
+            </button>
+          </div>
+        )}
+
+        {/* Connection / other error banner */}
+        {error && !notFound && (
           <div className="bg-red-900/50 border border-red-700 rounded-2xl px-5 py-4">
             <p className="text-red-300 font-semibold text-sm">{error}</p>
             <button

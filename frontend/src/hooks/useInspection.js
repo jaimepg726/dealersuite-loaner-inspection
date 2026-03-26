@@ -90,6 +90,27 @@ export default function useInspection() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Start Condition (no fleet vehicle) ────────────────────────────────────
+  const startCondition = useCallback(async (vinOverride) => {
+    const normalizedVin = vinOverride?.trim().toUpperCase() || null
+    setStarting(true); setError(null)
+    try {
+      const { data } = await api.post('/api/inspect/start', {
+        vehicle_id: null,
+        inspection_type: 'condition',
+        vin_override: normalizedVin,
+      })
+      setInspection(data)
+      if (!data.drive_folder_id) startPollingForFolder(data.id)
+      return data
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Could not start inspection'
+      setError(msg); throw err
+    } finally {
+      setStarting(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Direct-to-Drive upload ──────────────────────────────────────────────────
   async function _directDriveUpload(blob, mediaType, damageLocation, inspectionId, onProgress) {
     const mimeType = blob.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg')
@@ -207,5 +228,5 @@ export default function useInspection() {
     inspectionRef.current = null
   }, [])
 
-  return { inspection, starting, uploading, uploadPct, error, start, resume, uploadFile, complete, reset }
+  return { inspection, starting, uploading, uploadPct, error, start, startCondition, resume, uploadFile, complete, reset }
 }

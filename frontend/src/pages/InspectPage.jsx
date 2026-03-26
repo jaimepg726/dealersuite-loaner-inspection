@@ -59,9 +59,10 @@ export default function InspectPage() {
   const location  = useLocation()
   const navigate  = useNavigate()
 
-  const { inspection, starting, uploading, error, start, resume, uploadFile, complete, reset } = useInspection()
+  const { inspection, starting, uploading, error, start, startCondition, resume, uploadFile, complete, reset } = useInspection()
 
-  const vehicle  = location.state?.vehicle ?? null
+  const vehicle      = location.state?.vehicle ?? null
+  const conditionVin = location.state?.conditionVin ?? null
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
   const apiType  = TYPE_API_MAP[type] || 'Checkout'
 
@@ -78,11 +79,18 @@ export default function InspectPage() {
 
   // ── Start inspection on mount ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!vehicleId) return
-    const sessionKey = `inspection_${vehicleId}_${apiType}`
+    const isCondition = type === 'condition' && vehicleId === '0'
+
+    if (isCondition && !conditionVin) { setPhase('error'); return }
+    if (!isCondition && !vehicleId) return
+
+    const sessionKey = isCondition
+      ? `inspection_condition_${conditionVin}`
+      : `inspection_${vehicleId}_${apiType}`
+
     const existingId = sessionStorage.getItem(sessionKey)
     if (existingId) {
-      console.info(`Resuming existing inspection ${existingId} for vehicle ${vehicleId}`)
+      console.info(`Resuming existing inspection ${existingId}`)
       resume(Number(existingId))
         .then(() => setPhase('recording'))
         .catch(() => {
@@ -94,8 +102,10 @@ export default function InspectPage() {
       startFresh()
     }
     function startFresh() {
-      start(Number(vehicleId), apiType)
-        .then(data => { sessionStorage.setItem(sessionKey, String(data.id)); setPhase('recording') })
+      const p = isCondition
+        ? startCondition(conditionVin)
+        : start(Number(vehicleId), apiType)
+      p.then(data => { sessionStorage.setItem(sessionKey, String(data.id)); setPhase('recording') })
         .catch(() => setPhase('error'))
     }
     return () => { reset(); sessionStorage.removeItem(sessionKey) }
@@ -108,7 +118,12 @@ export default function InspectPage() {
     console.info('Video captured:', type + '_' + new Date().toISOString())
     videoBlobRef.current  = videoBlob
     photoBlobsRef.current = capturedPhotos
-    setPhase('damage')
+    // Condition videos skip damage logging — go straight to upload
+    if (type === 'condition') {
+      kickOffUploads([])
+    } else {
+      setPhase('damage')
+    }
   }
 
   function handleDamageComplete(damages) {
@@ -241,7 +256,11 @@ export default function InspectPage() {
           </div>
           <div>
             <p className="text-2xl font-extrabold text-brand-white">All Done!</p>
-            <p className="text-gray-500 text-sm mt-1">{inspection?.inspection_type} inspection saved</p>
+            <p className="text-gray-500 text-sm mt-1">
+              {type === 'condition' && conditionVin
+                ? `Condition video recorded — VIN ${conditionVin}`
+                : `${inspection?.inspection_type} inspection saved`}
+            </p>
           </div>
           <div className="flex flex-col gap-2 w-full max-w-xs">
             <div className="flex items-center gap-3 bg-green-900/40 border border-green-700 rounded-xl px-4 py-2.5">
@@ -279,9 +298,11 @@ export default function InspectPage() {
     )
   }
 
-  const subtitle = vehicle
-    ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim()
-    : `Vehicle #${vehicleId}`
+  const subtitle = (type === 'condition' && conditionVin)
+    ? `VIN: ${conditionVin}`
+    : vehicle
+      ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim()
+      : `Vehicle #${vehicleId}`
 
   const phaseTitle = { recording: typeInfo.label, damage: 'Log Damage', uploading: 'Saving…' }[phase] || typeInfo.label
   const ORDERED = ['recording', 'damage', 'uploading']

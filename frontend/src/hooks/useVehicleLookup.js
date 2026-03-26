@@ -11,20 +11,26 @@ export default function useVehicleLookup() {
   const [vehicle,  setVehicle]  = useState(null)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState(null)
+  const [notFound, setNotFound] = useState(false)
 
   const lookup = useCallback(async (vin) => {
     setLoading(true)
     setError(null)
     setVehicle(null)
+    setNotFound(false)
 
     try {
       const { data } = await api.get(`/api/vehicles/vin/${encodeURIComponent(vin)}`)
       setVehicle(data)
       return data
     } catch (err) {
-      const msg =
-        err.response?.data?.detail || 'Could not look up vehicle. Check your connection.'
-      setError(msg)
+      if (err.response?.status === 404) {
+        setNotFound(true)
+      } else {
+        const msg =
+          err.response?.data?.detail || 'Could not look up vehicle. Check your connection.'
+        setError(msg)
+      }
       return null
     } finally {
       setLoading(false)
@@ -53,7 +59,8 @@ export default function useVehicleLookup() {
   const reset = useCallback(() => {
     setVehicle(null)
     setError(null)
+    setNotFound(false)
   }, [])
 
-  return { vehicle, loading, error, lookup, lookupByLoaner, reset }
+  return { vehicle, loading, error, notFound, lookup, lookupByLoaner, reset }
 }
