@@ -4,7 +4,7 @@
  * Minimal training required for service drive porters.
  */
 import { useNavigate } from 'react-router-dom'
-import { Camera, LayoutDashboard, Power, KeyRound } from 'lucide-react'
+import { Camera, LayoutDashboard, Power, KeyRound, BookOpen } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/ui/PageHeader'
 import { t } from '../utils/lang'
@@ -81,6 +81,17 @@ export default function PorterHome() {
             <p className="text-brand-white text-2xl font-extrabold leading-tight">{t('Manager Review', 'Revisión del Gerente')}</p>
             <p className="text-gray-400 text-sm mt-0.5">{t('View inspections & reports', 'Ver inspecciones y reportes')}</p>
           </div>
+        </button>
+
+        {/* Training Guide — visible to all users */}
+        <button
+          onClick={() => navigate('/instructions')}
+          className="w-full flex items-center justify-center gap-2 py-4
+                     text-gray-500 text-sm font-semibold
+                     active:text-gray-300 transition-colors select-none"
+        >
+          <BookOpen className="w-4 h-4" />
+          {t('Training Guide', 'Guía de Capacitación')}
         </button>
 
         {/* Change PIN — only visible for advisor / manager sessions */}

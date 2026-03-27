@@ -10,25 +10,23 @@
 
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanBarcode, Hash, Camera, Keyboard, Loader2, Video } from 'lucide-react'
+import { Hash, Camera, Keyboard, Loader2, Video } from 'lucide-react'
 
 import PageHeader          from '../components/ui/PageHeader'
 import LoadingScreen       from '../components/ui/LoadingScreen'
-import BarcodeScanner      from '../components/inspection/BarcodeScanner'
 import OCRScanner          from '../components/inspection/OCRScanner'
 import ManualVINEntry      from '../components/inspection/ManualVINEntry'
 import useVehicleLookup    from '../hooks/useVehicleLookup'
 import { t } from '../utils/lang'
 
 const VIN_METHODS = [
-  { id: 'barcode', Icon: ScanBarcode },
-  { id: 'ocr',     Icon: Camera      },
-  { id: 'manual',  Icon: Keyboard    },
+  { id: 'scan',   Icon: Camera   },
+  { id: 'manual', Icon: Keyboard },
 ]
 
 export default function ScanVINPage() {
   const navigate  = useNavigate()
-  const [vinMethod,   setVinMethod]   = useState('barcode')
+  const [vinMethod,   setVinMethod]   = useState('scan')
   const [scanned,     setScanned]     = useState(null)
   const [loanerInput, setLoanerInput] = useState('')
   const [loanerLoading, setLoanerLoading] = useState(false)
@@ -173,9 +171,8 @@ export default function ScanVINPage() {
         {/* ── VIN method sub-tabs ───────────────────────────────────────── */}
         <div className="flex gap-2">
           {VIN_METHODS.map(({ id, Icon }) => {
-            const label = id === 'barcode' ? t('Barcode', 'Código')
-                        : id === 'ocr'     ? t('Camera', 'Cámara')
-                        :                    t('Manual', 'Manual')
+            const label = id === 'scan' ? t('Scan VIN', 'Escanear VIN')
+                        :                 t('Manual', 'Manual')
             return (
               <button
                 key={id}
@@ -193,32 +190,17 @@ export default function ScanVINPage() {
           })}
         </div>
 
-        {vinMethod === 'barcode' && (
+        {vinMethod === 'scan' && (
           <div className="flex flex-col gap-3">
             <p className="text-gray-400 text-sm text-center">
               {t(
-                'Point rear camera at the VIN barcode on the windshield or door jamb',
-                'Apunte la cámara trasera al código VIN en el parabrisas o puerta'
-              )}
-            </p>
-            <BarcodeScanner
-              onDetected={handleVINDetected}
-              active={vinMethod === 'barcode' && !loanerLoading && !notFound}
-            />
-          </div>
-        )}
-
-        {vinMethod === 'ocr' && (
-          <div className="flex flex-col gap-3">
-            <p className="text-gray-400 text-sm text-center">
-              {t(
-                'Point at the VIN number on the dashboard or door sticker, then tap Scan',
-                'Apunte al número VIN en el tablero o pegatina, luego toque Escanear'
+                'Point camera at the VIN on the windshield sticker or door jamb, then tap Scan',
+                'Apunte la cámara al VIN en el parabrisas o puerta, luego toque Escanear'
               )}
             </p>
             <OCRScanner
               onDetected={handleVINDetected}
-              active={vinMethod === 'ocr' && !loanerLoading && !notFound}
+              active={vinMethod === 'scan' && !loanerLoading && !notFound}
             />
           </div>
         )}

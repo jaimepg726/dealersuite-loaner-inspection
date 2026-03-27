@@ -69,6 +69,13 @@ export default function App() {
           </ProtectedRoute>
         } />
 
+        {/* ── Training guide (any authenticated user, standalone) ──────── */}
+        <Route path="/instructions" element={
+          <ProtectedRoute>
+            <InstructionsPage />
+          </ProtectedRoute>
+        } />
+
         {/* ── Manager routes (role: manager | admin only) ─────────────── */}
         <Route path="/dashboard" element={
           <ProtectedRoute requireManager>
