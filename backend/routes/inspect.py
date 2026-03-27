@@ -120,6 +120,7 @@ async def complete_inspection(
     current_user=Depends(get_current_user),
 ):
     inspection = await _complete(db, inspection_id, body.photo_count, body.notes)
+    await db.commit()   # persist "Completed" status before response is sent
     return await get_inspection_by_id(db, inspection.id)
 
 
@@ -334,10 +335,13 @@ async def upload_media(
     if content_type not in ALLOWED_MIMETYPES:
         raise HTTPException(status_code=415, detail=f"Unsupported MIME type '{content_type}'")
 
-    # Video dedup — if any video record already exists for this inspection
-    # (including a "pending" orphan from a failed /upload-session), return it
-    # rather than creating a second record.  This is the critical guard that
-    # prevents the upload-session-pending + legacy-fallback double-record bug.
+    # Video dedup — check for existing video records.
+    # • Finalized record (file_url != "pending") → already uploaded; return it.
+    # • Pending orphan (file_url == "pending") → previous /upload-session failed
+    #   before /finalize-upload was called; delete it so this legacy upload can
+    #   save the actual video bytes.  Returning the orphan as-is would leave
+    #   file_url="pending" forever (stripped by the Pydantic validator → manager
+    #   sees "No media was uploaded" even though the porter completed the flow).
     if media_type == "video":
         vid_dup = await db.execute(
             select(InspectionMedia).where(
@@ -347,18 +351,28 @@ async def upload_media(
         )
         vid_existing = vid_dup.scalars().first()
         if vid_existing:
+            if vid_existing.file_url != "pending":
+                # Already finalized — return it to prevent a true duplicate.
+                logger.warning(
+                    "upload (legacy): finalized video already exists for inspection %d "
+                    "(record %d, url=%s) — skipping duplicate",
+                    inspection_id, vid_existing.id, vid_existing.file_url,
+                )
+                return UploadResponse(
+                    file_id=str(vid_existing.id),
+                    file_url=vid_existing.file_url,
+                    filename=file.filename or f"video_{vid_existing.id}",
+                    bytes_uploaded=len(content),
+                    backend="deduplicated",
+                )
+            # Orphaned pending record — delete it and fall through to upload fresh.
             logger.warning(
-                "upload (legacy): video already exists for inspection %d "
-                "(record %d, url=%s) — skipping duplicate",
-                inspection_id, vid_existing.id, vid_existing.file_url,
+                "upload (legacy): deleting orphaned pending video record %d "
+                "for inspection %d — proceeding with fresh upload",
+                vid_existing.id, inspection_id,
             )
-            return UploadResponse(
-                file_id=str(vid_existing.id),
-                file_url=vid_existing.file_url,
-                filename=file.filename or f"video_{vid_existing.id}",
-                bytes_uploaded=len(content),
-                backend="deduplicated",
-            )
+            await db.delete(vid_existing)
+            await db.flush()
 
     # Hash-based dedup (applies to photos and any edge cases not caught above)
     file_hash = hashlib.sha256(content).hexdigest()
