@@ -76,10 +76,12 @@ export default function InspectPage() {
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
   const apiType  = TYPE_API_MAP[type] || 'Checkout'
 
-  const [phase,       setPhase]       = useState('init')
-  const [uploadSteps, setUploadSteps] = useState([])
-  const [uploadPct,   setUploadPct]   = useState(0)
-  const [uploadError, setUploadError] = useState(null)
+  const [phase,          setPhase]          = useState('init')
+  const [uploadSteps,    setUploadSteps]    = useState([])
+  const [uploadPct,      setUploadPct]      = useState(0)
+  const [uploadError,    setUploadError]    = useState(null)
+  const [finalizeFailure, setFinalizeFailure] = useState(null)  // { inspectionId, finalizePayload, damages }
+  const [finalizeRetrying, setFinalizeRetrying] = useState(false)
 
   const videoBlobRef      = useRef(null)
   const photoBlobsRef     = useRef([])
@@ -146,6 +148,30 @@ export default function InspectPage() {
     kickOffUploads([])
   }
 
+  // ── Finalize retry — called when porter taps "Try Again" after finalize failure ─────────
+  async function handleFinalizeRetry() {
+    if (!finalizeFailure || finalizeRetrying) return
+    setFinalizeRetrying(true)
+    try {
+      await api.post(
+        `/api/inspect/${finalizeFailure.inspectionId}/finalize-upload`,
+        finalizeFailure.finalizePayload,
+      )
+      // Finalize succeeded — continue upload from after the video step.
+      // Set videoBlob to null so kickOffUploads skips the video upload step,
+      // then reset the guard and resume with stored damage data.
+      const savedDamages = finalizeFailure.damages
+      setFinalizeFailure(null)
+      setFinalizeRetrying(false)
+      videoBlobRef.current      = null   // video already in Drive — skip re-upload
+      uploadsStartedRef.current = false  // reset guard so kickOffUploads can run again
+      kickOffUploads(savedDamages)
+    } catch {
+      setFinalizeRetrying(false)
+      // Keep showing the retry UI — porter can try again or go home
+    }
+  }
+
   // ── Upload orchestration ────────────────────────────────────────────────────────────────
   // Stored in a ref so the function identity never changes between renders.
   // Prevents a re-render from setInspection() producing a new kickOffUploads
@@ -175,7 +201,19 @@ export default function InspectPage() {
       if (videoBlob) {
         mark('active')
         try { await uploadFile(videoBlob, 'video') }
-        catch { console.warn('Video upload skipped — Drive may not be configured') }
+        catch (err) {
+          if (err.finalizeFailedAfterUpload) {
+            // Drive upload succeeded but finalize-upload failed after all retries.
+            // Store retry metadata and pause — porter will use the Try Again UI.
+            setFinalizeFailure({
+              inspectionId:   err.inspectionId,
+              finalizePayload: err.finalizePayload,
+              damages,
+            })
+            return   // stop upload flow; do NOT mark done or call complete
+          }
+          console.warn('Video upload skipped — Drive may not be configured')
+        }
         mark('done'); si++; setUploadPct(0)
       }
 
@@ -360,6 +398,30 @@ export default function InspectPage() {
         )}
         {phase === 'uploading' && (
           <UploadProgress steps={uploadSteps} currentPct={uploadPct} errorMsg={uploadError} />
+        )}
+        {phase === 'uploading' && finalizeFailure && (
+          <div className="flex flex-col gap-3 bg-brand-mid border border-brand-accent rounded-2xl p-5">
+            <p className="text-green-400 font-semibold text-sm text-center">
+              ✓ {t('Video uploaded successfully.', 'Video subido correctamente.')}
+            </p>
+            <p className="text-gray-400 text-sm text-center">
+              {t(
+                "Couldn't save the inspection record. Please try again.",
+                'No se pudo guardar el registro. Por favor intente de nuevo.',
+              )}
+            </p>
+            <button
+              onClick={handleFinalizeRetry}
+              disabled={finalizeRetrying}
+              className="btn-primary disabled:opacity-50"
+            >
+              {finalizeRetrying && <Loader className="w-4 h-4 animate-spin" />}
+              {t('Try Again', 'Intentar de nuevo')}
+            </button>
+            <button onClick={() => navigate('/')} className="btn-ghost">
+              <Home className="w-4 h-4" /> {t('Go Home', 'Ir al Inicio')}
+            </button>
+          </div>
         )}
         {phase === 'uploading' && uploadError && (
           <button onClick={() => navigate('/')} className="btn-ghost w-auto px-8 mx-auto">

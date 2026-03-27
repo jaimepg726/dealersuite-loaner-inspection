@@ -143,12 +143,38 @@ export default function useInspection() {
       xhr.onerror = () => reject(new Error('Drive PUT network error'))
       xhr.send(blob)
     })
-    const { data: finalized } = await api.post(`/api/inspect/${inspectionId}/finalize-upload`, {
+
+    // Media is now in Drive. Retry finalize-upload up to 3 times (2 s between
+    // attempts) — a transient backend error must not leave the record "pending".
+    // If all retries fail we throw with finalizeFailedAfterUpload=true so the
+    // caller can show a targeted retry UI instead of falling back to a re-upload.
+    const finalizePayload = {
       media_record_id: session.media_record_id,
-      drive_file_id: driveFileId ?? session.media_record_id.toString(),
-      mime_type: mimeType, media_type: mediaType, file_size: blob.size,
-    })
-    return finalized
+      drive_file_id:   driveFileId ?? session.media_record_id.toString(),
+      mime_type:       mimeType,
+      media_type:      mediaType,
+      file_size:       blob.size,
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000))
+        const { data: finalized } = await api.post(
+          `/api/inspect/${inspectionId}/finalize-upload`,
+          finalizePayload,
+        )
+        return finalized
+      } catch (err) {
+        console.warn(`finalize-upload attempt ${attempt + 1}/3 failed:`, err.message)
+        if (attempt === 2) {
+          // All retries exhausted — Drive file exists but DB not yet linked.
+          const finalizeErr = new Error('finalize-upload failed after 3 attempts')
+          finalizeErr.finalizeFailedAfterUpload = true
+          finalizeErr.finalizePayload  = finalizePayload
+          finalizeErr.inspectionId     = inspectionId
+          throw finalizeErr
+        }
+      }
+    }
   }
 
   // ── Legacy upload (Railway proxy — fallback when Drive not connected) ────────
@@ -187,6 +213,11 @@ export default function useInspection() {
       try {
         result = await _directDriveUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct))
       } catch (directErr) {
+        if (directErr.finalizeFailedAfterUpload) {
+          // Media reached Drive successfully — do NOT re-upload via legacy.
+          // Surface this to the caller so it can show a targeted retry UI.
+          throw directErr
+        }
         console.warn('Direct Drive upload failed, falling back to Railway proxy:', directErr.message)
         setUploadPct(0)
         result = await _legacyUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct))

@@ -218,7 +218,7 @@ function VideoPlayer({ m }) {
       {error && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-gray-500">
           <WifiOff className="w-5 h-5" />
-          <span className="text-sm">Could not load video</span>
+          <span className="text-sm">Video may still be processing — check back in a few minutes</span>
         </div>
       )}
       {src && !error && (
