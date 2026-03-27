@@ -111,9 +111,7 @@ export default function CSVImportModal({ onClose, onImportComplete }) {
     form.append('file', file)
 
     try {
-      const { data } = await api.post('/api/fleet/import', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const { data } = await api.post('/api/fleet/import', form)
       setResult(data)
       setPhase('done')
       onImportComplete?.()   // refresh parent fleet list

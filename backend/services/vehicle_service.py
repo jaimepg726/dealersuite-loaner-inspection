@@ -147,6 +147,7 @@ async def upsert_vehicle_from_csv(db: AsyncSession, row: dict) -> tuple[Vehicle,
         "status":        status_val,
         "vehicle_type":  row.get("Vehicle_Type", "Loaner"),
         "fuel_level":    row.get("Fuel"),
+        "is_active":     True,   # always re-activate vehicles present in the import file
     }
 
     if existing:

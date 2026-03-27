@@ -194,7 +194,10 @@ async def import_fleet_csv(
         }
 
         try:
-            _vehicle, action = await upsert_vehicle_from_csv(db, normalised)
+            # Use a savepoint so a flush failure on one row doesn't taint the
+            # entire session — subsequent rows and the final commit remain healthy.
+            async with db.begin_nested():
+                _vehicle, action = await upsert_vehicle_from_csv(db, normalised)
 
             if action == "created":
                 result.created += 1

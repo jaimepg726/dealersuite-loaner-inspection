@@ -5,9 +5,13 @@ GET  /api/fleet/vehicles      → paginated vehicle list for manager fleet tab
 GET  /api/fleet/vehicles/{id} → single vehicle with inspection history count
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+
+logger = logging.getLogger(__name__)
 
 from database import get_db
 from dependencies import require_manager, get_current_user
@@ -45,7 +49,14 @@ async def import_fleet_csv(
     if len(contents) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="CSV file too large (max 10 MB)")
 
-    result = await _import_csv(contents, db)
+    try:
+        result = await _import_csv(contents, db)
+    except Exception as exc:
+        logger.error("Fleet CSV import unhandled exception: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Import failed: {exc}",
+        )
 
     summary = result.to_dict()
     summary["decommissioned"] = getattr(result, "decommissioned", 0)
