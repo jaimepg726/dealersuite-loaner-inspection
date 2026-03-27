@@ -25,6 +25,23 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, LogOut, LogIn, Video } from 'lucide-react'
 
+// ── Screenshot assets ─────────────────────────────────────────────────────────
+// When screenshots are ready, place them in frontend/public/screenshots/ and
+// add a `screenshot` field to the relevant step objects below.
+// Expected filenames:
+//   home-new-inspection.jpg    — PorterHome screen (Checkout step 2, Checkin step 2, Condition step 1)
+//   loaner-lookup.jpg          — ScanVINPage loaner number entry (Checkout step 3, Checkin step 3)
+//   type-select-checkout.jpg   — SelectInspectionTypePage, Checkout highlighted (Checkout step 4)
+//   type-select-checkin.jpg    — SelectInspectionTypePage, Check-In highlighted (Checkin step 4)
+//   walkround-recording.jpg    — InspectPage recording screen (Checkout step 5, Checkin step 5, Condition step 4)
+//   damage-log.jpg             — Damage reporting screen (Checkout step 6, Checkin step 6)
+//   upload-done.jpg            — "All Done!" completion screen (Checkout step 7, Checkin step 7, Condition step 5)
+//   vin-scan.jpg               — ScanVINPage VIN entry mode (Condition step 2)
+//   condition-not-found.jpg    — Teal "Continue as Condition Video" card (Condition step 3)
+//   key-tag.jpg                — Physical key tag with loaner number (Checkout step 1, Checkin step 1)
+//
+// Usage: add screenshot: '/screenshots/filename.jpg' to a step object.
+
 // ── Content ──────────────────────────────────────────────────────────────────
 
 const CONTENT = {
@@ -256,7 +273,7 @@ const CONTENT = {
 }
 
 // ── Step card ─────────────────────────────────────────────────────────────────
-function StepCard({ number, title, desc }) {
+function StepCard({ number, title, desc, screenshot }) {
   return (
     <div className="flex gap-3">
       {/* Step number */}
@@ -271,11 +288,16 @@ function StepCard({ number, title, desc }) {
         {/* Description */}
         <p className="text-gray-400 text-xs mt-1 leading-relaxed">{desc}</p>
 
-        {/* Image placeholder — replace div with <img> when screenshots are ready */}
-        <div className="mt-3 w-full rounded-xl border border-dashed border-brand-accent/60
-                        flex items-center justify-center py-5 bg-brand-mid/40">
-          <span className="text-gray-600 text-xs font-semibold tracking-wider">[ Photo ]</span>
-        </div>
+        {/* Screenshot or placeholder */}
+        {screenshot
+          ? <img src={screenshot} alt={title} className="mt-3 w-full rounded-xl" />
+          : (
+            <div className="mt-3 w-full rounded-xl border border-dashed border-brand-accent/60
+                            flex items-center justify-center py-5 bg-brand-mid/40">
+              <span className="text-gray-600 text-xs font-semibold tracking-wider">[ Photo ]</span>
+            </div>
+          )
+        }
       </div>
     </div>
   )
@@ -305,6 +327,7 @@ function SectionCard({ section }) {
             number={i + 1}
             title={step.title}
             desc={step.desc}
+            screenshot={step.screenshot}
           />
         ))}
       </div>

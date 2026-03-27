@@ -9,9 +9,9 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Settings, RefreshCw, HardDrive, CheckCircle, AlertTriangle,
+  Settings, RefreshCw, HardDrive, CheckCircle,
   UserPlus, Users, X, Eye, EyeOff, ExternalLink, Unlink, Zap,
-  WifiOff, CloudOff, Activity, Database, FlaskConical, BookOpen, ChevronRight,
+  WifiOff, CloudOff, Activity, Database, BookOpen, ChevronRight,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../utils/api'
@@ -92,7 +92,7 @@ function DriveSection() {
     return <div className="card h-24 animate-pulse bg-brand-mid" />
   }
 
-  const connected = status?.connected && !status?.token_expired
+  const connected = status?.connected
 
   return (
     <div className="card flex flex-col gap-4">
@@ -106,14 +106,10 @@ function DriveSection() {
           <div className="flex items-center gap-2 flex-wrap">
             {connected
               ? <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
-              : status?.connected
-                ? <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
-                : <CloudOff className="w-4 h-4 text-gray-500 shrink-0" />
+              : <CloudOff className="w-4 h-4 text-gray-500 shrink-0" />
             }
-            <span className={`font-bold text-sm ${
-              connected ? 'text-green-400' : status?.connected ? 'text-yellow-400' : 'text-gray-400'
-            }`}>
-              {connected ? 'Drive Connected' : status?.connected ? 'Token Expired' : 'Not Connected'}
+            <span className={`font-bold text-sm ${connected ? 'text-green-400' : 'text-gray-400'}`}>
+              {connected ? 'Drive Connected' : 'Not Connected'}
             </span>
           </div>
 
@@ -131,9 +127,7 @@ function DriveSection() {
 
           {!connected && (
             <p className="text-gray-500 text-xs mt-0.5">
-              {status?.connected
-                ? 'Token needs refresh â reconnect to restore Drive uploads'
-                : 'Connect Google Drive to store inspection videos & damage photos'}
+              Connect Google Drive to store inspection videos &amp; damage photos
             </p>
           )}
         </div>
@@ -241,72 +235,6 @@ function SystemStatusSection() {
   )
 }
 
-function DemoModeSection() {
-  const [demoActive, setDemoActive] = useState(false)
-  const [loading,    setLoading]    = useState(true)
-  const [toggling,   setToggling]   = useState(false)
-
-  const loadStatus = useCallback(async () => {
-    try {
-      const { data } = await api.get('/api/admin/demo/status')
-      setDemoActive(data.demo_mode)
-    } catch {
-      setDemoActive(false)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { loadStatus() }, [loadStatus])
-
-  async function handleToggle() {
-    setToggling(true)
-    try {
-      if (demoActive) {
-        await api.post('/api/admin/demo/disable')
-      } else {
-        await api.post('/api/admin/demo/enable')
-      }
-      await loadStatus()
-      // Trigger a page-level data refresh by reloading
-      window.dispatchEvent(new Event('demo-mode-changed'))
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Could not toggle demo mode')
-    } finally {
-      setToggling(false)
-    }
-  }
-
-  return (
-    <div className="card flex items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0
-          ${demoActive ? 'bg-yellow-500/15' : 'bg-brand-accent'}`}>
-          <FlaskConical className={`w-5 h-5 ${demoActive ? 'text-yellow-400' : 'text-gray-500'}`} />
-        </div>
-        <div>
-          <p className="font-bold text-sm text-brand-white">Demo Mode</p>
-          <p className="text-gray-500 text-xs">
-            Simulated data for demos. Never affects real records.
-          </p>
-        </div>
-      </div>
-
-      <button
-        onClick={handleToggle}
-        disabled={loading || toggling}
-        className={`relative w-14 h-7 rounded-full transition-colors shrink-0 ${
-          demoActive ? 'bg-yellow-500' : 'bg-brand-accent'
-        } disabled:opacity-50`}
-        aria-label={demoActive ? 'Disable demo mode' : 'Enable demo mode'}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-          demoActive ? 'translate-x-7' : 'translate-x-0'
-        }`} />
-      </button>
-    </div>
-  )
-}
 
 // ââ Add-User modal ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'porter' }
@@ -413,7 +341,6 @@ export default function SettingsPage() {
   const [usersLoading, setUsersLoading] = useState(true)
   const [usersError,   setUsersError]   = useState(null)
   const [showInactive, setShowInactive] = useState(false)
-  const [roleFilter,   setRoleFilter]   = useState('All')
   const [showAddModal, setShowAddModal] = useState(false)
 
   const loadUsers = useCallback(async () => {
@@ -421,7 +348,6 @@ export default function SettingsPage() {
     setUsersError(null)
     try {
       const params = new URLSearchParams({ limit: 200 })
-      if (roleFilter !== 'All') params.set('role', roleFilter.toLowerCase())
       if (!showInactive) params.set('is_active', 'true')
       const { data } = await api.get(`/api/manager/users?${params}`)
       setUsers(data.users)
@@ -431,12 +357,10 @@ export default function SettingsPage() {
     } finally {
       setUsersLoading(false)
     }
-  }, [roleFilter, showInactive])
+  }, [showInactive])
 
   useEffect(() => { loadUsers() }, [loadUsers])
 
-  const porterCount  = users.filter((u) => u.role === 'porter'  && u.is_active).length
-  const managerCount = users.filter((u) => u.role === 'manager' && u.is_active).length
 
   return (
     <div className="flex flex-col pb-10">
@@ -484,12 +408,6 @@ export default function SettingsPage() {
           <SystemStatusSection />
         </div>
 
-        {/* Demo Mode */}
-        <div>
-          <SectionTitle>Demo Mode</SectionTitle>
-          <DemoModeSection />
-        </div>
-
         {/* User Management */}
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -498,34 +416,6 @@ export default function SettingsPage() {
               className="flex items-center gap-1.5 bg-brand-blue text-white text-xs font-bold px-4 py-2 rounded-xl active:scale-95 transition-transform">
               <UserPlus className="w-3.5 h-3.5" />
               Add User
-            </button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            {[
-              { label: 'Total',    value: usersTotal,   color: 'text-brand-white' },
-              { label: 'Porters',  value: porterCount,  color: 'text-brand-blue'  },
-              { label: 'Managers', value: managerCount, color: 'text-purple-400'  },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="card py-3 text-center">
-                <p className={`text-2xl font-extrabold ${color}`}>{usersLoading ? 'â¦' : value}</p>
-                <p className="text-gray-500 text-xs mt-0.5">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            {['All', 'Porter', 'Manager'].map((r) => (
-              <button key={r} onClick={() => setRoleFilter(r)}
-                className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors
-                  ${roleFilter === r ? 'bg-brand-yellow border-yellow-600 text-black' : 'bg-brand-mid border-brand-accent text-gray-400'}`}>
-                {r}
-              </button>
-            ))}
-            <button onClick={() => setShowInactive(!showInactive)}
-              className={`ml-auto text-xs font-bold px-3 py-1.5 rounded-full border transition-colors
-                ${showInactive ? 'bg-brand-yellow border-yellow-600 text-black' : 'bg-brand-mid border-brand-accent text-gray-400'}`}>
-              {showInactive ? 'Hide inactive' : 'Show inactive'}
             </button>
           </div>
 
@@ -548,23 +438,19 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+
+          <button
+            onClick={() => setShowInactive(!showInactive)}
+            className="mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            {showInactive ? 'Hide inactive users' : 'Show inactive users'}
+          </button>
         </div>
 
         {/* App Info */}
-        <div className="card">
-          <SectionTitle>App Info</SectionTitle>
-          {[
-            { label: 'App',     value: 'DealerSuite Loaner Inspection' },
-            { label: 'Version', value: '1.0.0-batch3' },
-            { label: 'Storage', value: 'Google Drive (OAuth) + Local Fallback' },
-            { label: 'Stack',   value: 'React 18 + FastAPI + Railway' },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between py-2.5 border-b border-brand-accent last:border-0">
-              <span className="text-gray-500 text-sm">{label}</span>
-              <span className="text-brand-white text-sm font-semibold">{value}</span>
-            </div>
-          ))}
-        </div>
+        <p className="text-center text-gray-600 text-xs pb-2">
+          DealerSuite Loaner Inspection&nbsp;&middot;&nbsp;v1.0.0
+        </p>
       </div>
 
       {showAddModal && (

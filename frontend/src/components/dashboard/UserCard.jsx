@@ -8,7 +8,7 @@
  *   onUpdated  — called after a successful PATCH so the parent can reload
  */
 import { useState } from 'react'
-import { UserCircle, ShieldCheck, Wrench, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react'
+import { UserCircle, ShieldCheck, Wrench, RefreshCw } from 'lucide-react'
 import api from '../../utils/api'
 
 const ROLE_STYLE = {
@@ -106,37 +106,32 @@ export default function UserCard({ user, currentId, onUpdated }) {
           <button
             onClick={toggleActive}
             disabled={busy}
-            className="ml-1 shrink-0 active:scale-95 transition-transform"
+            className={`ml-1 shrink-0 px-2.5 py-1 rounded-full border text-xs font-bold
+              transition-colors active:scale-95 disabled:opacity-50
+              ${user.is_active
+                ? 'border-green-700 text-green-400 bg-green-900/30'
+                : 'border-brand-accent text-gray-500 bg-brand-mid'}`}
             aria-label={user.is_active ? 'Deactivate' : 'Activate'}
-            title={user.is_active ? 'Deactivate account' : 'Activate account'}
           >
             {busy
-              ? <RefreshCw className="w-5 h-5 text-gray-500 animate-spin" />
-              : user.is_active
-                ? <ToggleRight className="w-6 h-6 text-green-400" />
-                : <ToggleLeft  className="w-6 h-6 text-gray-600" />
+              ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              : user.is_active ? 'Active' : 'Inactive'
             }
           </button>
         )}
       </div>
 
-      {/* ── Last login + Reset password toggle ───────────────────────────── */}
-      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-brand-accent">
-        <span className="text-xs text-gray-600">
-          {user.last_login
-            ? `Last login ${new Date(user.last_login).toLocaleDateString()}`
-            : 'Never logged in'}
-        </span>
-
-        {!isSelf && (
+      {/* ── Reset password toggle ─────────────────────────────────────────── */}
+      {!isSelf && (
+        <div className="flex justify-end mt-3 pt-2.5 border-t border-brand-accent">
           <button
             onClick={() => { setReseting(!reseting); setError(null); setNewPass('') }}
             className="text-xs font-semibold text-brand-blue active:opacity-70"
           >
             {reseting ? 'Cancel' : 'Reset password'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Password reset form ───────────────────────────────────────────── */}
       {reseting && (
