@@ -76,7 +76,12 @@ export default function InspectionCard({ inspection }) {
               )}
             </p>
           ) : inspection.inspection_type === 'Condition' ? (
-            <p className="text-teal-400 text-sm font-semibold">Customer Vehicle</p>
+            <div>
+              <p className="text-teal-400 text-sm font-semibold">Customer Vehicle</p>
+              {inspection.vin_override && (
+                <p className="text-gray-500 text-xs font-mono mt-0.5">{inspection.vin_override}</p>
+              )}
+            </div>
           ) : (
             <p className="text-gray-500 text-sm">Vehicle #{inspection.vehicle_id}</p>
           )}

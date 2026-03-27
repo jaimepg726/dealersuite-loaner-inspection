@@ -3,11 +3,11 @@
  * Filterable list of all inspections with Drive folder links.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, ClipboardList } from 'lucide-react'
+import { RefreshCw, ClipboardList, Search, X } from 'lucide-react'
 import api from '../../utils/api'
 import InspectionCard from '../../components/dashboard/InspectionCard'
 
-const TYPE_FILTERS   = ['All', 'Checkout', 'Checkin', 'Inventory', 'Sales']
+const TYPE_FILTERS   = ['All', 'Checkout', 'Checkin', 'Inventory', 'Sales', 'Condition']
 const STATUS_FILTERS = ['All', 'Completed', 'In Progress', 'Failed']
 const DAY_FILTERS    = [
   { label: 'Today',     days: 1  },
@@ -24,6 +24,7 @@ export default function InspectionsPage() {
   const [typeFilter,  setTypeFilter]  = useState('All')
   const [statusFilter,setStatusFilter]= useState('All')
   const [dayFilter,   setDayFilter]   = useState(7)
+  const [vinSearch,   setVinSearch]   = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -46,6 +47,17 @@ export default function InspectionsPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Client-side VIN / loaner search on the loaded set.
+  // Normalise to uppercase + trim before comparing.
+  const needle = vinSearch.trim().toUpperCase()
+  const displayedInspections = needle
+    ? inspections.filter(i =>
+        i.vin_override?.toUpperCase().includes(needle) ||
+        i.vehicle?.vin?.toUpperCase().includes(needle) ||
+        i.vehicle?.loaner_number?.toUpperCase().includes(needle)
+      )
+    : inspections
+
   return (
     <div className="flex flex-col">
       {/* Header */}
@@ -54,7 +66,11 @@ export default function InspectionsPage() {
           <div>
             <h2 className="text-2xl font-extrabold text-brand-white">Inspections</h2>
             <p className="text-gray-500 text-sm">
-              {loading ? 'Loading…' : `${total} record${total !== 1 ? 's' : ''}`}
+              {loading
+                ? 'Loading…'
+                : needle
+                  ? `${displayedInspections.length} of ${total} record${total !== 1 ? 's' : ''}`
+                  : `${total} record${total !== 1 ? 's' : ''}`}
             </p>
           </div>
           <button
@@ -64,6 +80,30 @@ export default function InspectionsPage() {
           >
             <RefreshCw className={`w-5 h-5 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
           </button>
+        </div>
+
+        {/* VIN / loaner search */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+          <input
+            type="text"
+            value={vinSearch}
+            onChange={(e) => setVinSearch(e.target.value)}
+            placeholder="Search VIN or loaner #…"
+            className="w-full bg-brand-mid border border-brand-accent rounded-xl
+                       pl-9 pr-9 py-2.5 text-sm text-brand-white
+                       placeholder:text-gray-600 focus:outline-none focus:border-brand-blue
+                       transition-colors"
+          />
+          {vinSearch && (
+            <button
+              onClick={() => setVinSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Day filter */}
@@ -125,15 +165,17 @@ export default function InspectionsPage() {
           <p className="text-red-400 text-sm text-center py-8">{error}</p>
         )}
 
-        {!loading && !error && inspections.length === 0 && (
+        {!loading && !error && displayedInspections.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <ClipboardList className="w-12 h-12 text-brand-accent" strokeWidth={1} />
             <p className="text-gray-400 font-semibold">No inspections found</p>
-            <p className="text-gray-600 text-sm">Try adjusting the filters above</p>
+            <p className="text-gray-600 text-sm">
+              {needle ? 'No results for that VIN or loaner number' : 'Try adjusting the filters above'}
+            </p>
           </div>
         )}
 
-        {!loading && inspections.map((i) => (
+        {!loading && displayedInspections.map((i) => (
           <InspectionCard key={i.id} inspection={i} />
         ))}
       </div>

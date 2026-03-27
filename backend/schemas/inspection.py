@@ -95,6 +95,7 @@ class InspectionSummary(BaseModel):
     inspection_type:  str
     status:           str
     inspector_name:   Optional[str]    = None
+    vin_override:     Optional[str]    = None
     photo_count:      int              = 0
     video_count:      int              = 0
     drive_folder_url: Optional[str]    = None

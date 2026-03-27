@@ -19,20 +19,20 @@
  */
 
 export const WALKROUND_STEPS = [
-  { label: 'Driver Front Wheel',    hint: 'Get close — show full wheel face',    duration: 8,  cx: 8,  cy: 22 },
-  { label: 'Driver Side',           hint: 'Hold level at door handle height',    duration: 8,  cx: 4,  cy: 45 },
-  { label: 'Driver Rear Wheel',     hint: 'Get close — show full wheel face',    duration: 6,  cx: 8,  cy: 68 },
-  { label: 'Rear Bumper',           hint: 'Full width — stay level',             duration: 6,  cx: 28, cy: 84 },
-  { label: 'Passenger Rear Wheel',  hint: 'Get close — show full wheel face',    duration: 6,  cx: 48, cy: 68 },
-  { label: 'Passenger Side',        hint: 'Level sweep — front to back',         duration: 8,  cx: 52, cy: 45 },
-  { label: 'Passenger Front Wheel', hint: 'Get close — show full wheel face',    duration: 6,  cx: 48, cy: 22 },
-  { label: 'Front Bumper',          hint: 'Step back — capture full width',      duration: 6,  cx: 28, cy: 6  },
-  { label: 'Windshield & Hood',     hint: 'Step back — get full glass and hood', duration: 8,  cx: 28, cy: 18 },
+  { label: 'Driver Front Wheel',    hint: 'Get close — show full wheel face',    duration: 9,  cx: 8,  cy: 22 },
+  { label: 'Driver Side',           hint: 'Hold level at door handle height',    duration: 9,  cx: 4,  cy: 45 },
+  { label: 'Driver Rear Wheel',     hint: 'Get close — show full wheel face',    duration: 7,  cx: 8,  cy: 68 },
+  { label: 'Rear Bumper',           hint: 'Full width — stay level',             duration: 7,  cx: 28, cy: 84 },
+  { label: 'Passenger Rear Wheel',  hint: 'Get close — show full wheel face',    duration: 7,  cx: 48, cy: 68 },
+  { label: 'Passenger Side',        hint: 'Level sweep — front to back',         duration: 9,  cx: 52, cy: 45 },
+  { label: 'Passenger Front Wheel', hint: 'Get close — show full wheel face',    duration: 7,  cx: 48, cy: 22 },
+  { label: 'Front Bumper',          hint: 'Step back — capture full width',      duration: 7,  cx: 28, cy: 6  },
+  { label: 'Windshield & Hood',     hint: 'Step back — get full glass and hood', duration: 9,  cx: 28, cy: 18 },
 ]
 
 /**
  * Minimum recording duration in seconds before "Stop Recording" unlocks.
  * Increase for real inspections; decrease for testing/demo.
- * Current value: 60s (covers all 9 steps at their full durations = 62s total).
+ * Current value: 72s (covers all 9 steps at their full durations = 71s total, plus 1s buffer).
  */
-export const MIN_RECORD_SECONDS = 60
+export const MIN_RECORD_SECONDS = 72

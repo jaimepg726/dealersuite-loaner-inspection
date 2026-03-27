@@ -11,8 +11,9 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Settings, RefreshCw, HardDrive, CheckCircle, AlertTriangle,
   UserPlus, Users, X, Eye, EyeOff, ExternalLink, Unlink, Zap,
-  WifiOff, CloudOff, Activity, Database, FlaskConical,
+  WifiOff, CloudOff, Activity, Database, FlaskConical, BookOpen, ChevronRight,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../utils/api'
 import { useAuth } from '../../context/AuthContext'
 import UserCard from '../../components/dashboard/UserCard'
@@ -406,6 +407,7 @@ function AddUserModal({ onClose, onCreated }) {
 // ââ Main page âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function SettingsPage() {
   const { user: me } = useAuth()
+  const navigate = useNavigate()
   const [users,        setUsers]        = useState([])
   const [usersTotal,   setUsersTotal]   = useState(0)
   const [usersLoading, setUsersLoading] = useState(true)
@@ -450,6 +452,26 @@ export default function SettingsPage() {
       </div>
 
       <div className="px-5 flex flex-col gap-6">
+        {/* Instructions */}
+        <div>
+          <SectionTitle>Instructions</SectionTitle>
+          <button
+            onClick={() => navigate('/dashboard/instructions')}
+            className="w-full card flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
+          >
+            <div className="w-11 h-11 bg-brand-blue/10 rounded-2xl flex items-center justify-center shrink-0">
+              <BookOpen className="w-5 h-5 text-brand-blue" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-brand-white">Staff Training Guide</p>
+              <p className="text-gray-500 text-xs mt-0.5">
+                Step-by-step instructions in English and Spanish
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
+          </button>
+        </div>
+
         {/* Google Drive */}
         <div>
           <SectionTitle>Google Drive</SectionTitle>
