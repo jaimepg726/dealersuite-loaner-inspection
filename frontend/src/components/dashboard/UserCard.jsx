@@ -37,6 +37,7 @@ export default function UserCard({ user, currentId, onUpdated }) {
   // ── Toggle active / inactive ──────────────────────────────────────────────
   async function toggleActive() {
     if (isSelf) return
+    if (user.is_active && !window.confirm(`Deactivate ${user.name}? They won't be able to log in.`)) return
     setBusy(true)
     setError(null)
     try {

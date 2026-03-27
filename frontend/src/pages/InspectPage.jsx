@@ -267,10 +267,17 @@ export default function InspectPage() {
               <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
               <span className="text-green-300 text-sm font-semibold">Inspection Saved</span>
             </div>
-            <div className="flex items-center gap-3 bg-green-900/40 border border-green-700 rounded-xl px-4 py-2.5">
-              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-              <span className="text-green-300 text-sm font-semibold">Media Uploaded</span>
-            </div>
+            {type !== 'condition' && inspection?.video_count === 0 ? (
+              <div className="flex items-center gap-3 bg-yellow-900/40 border border-yellow-700 rounded-xl px-4 py-2.5">
+                <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0" />
+                <span className="text-yellow-300 text-sm font-semibold">Video may not have uploaded — check Drive</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-green-900/40 border border-green-700 rounded-xl px-4 py-2.5">
+                <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+                <span className="text-green-300 text-sm font-semibold">Media Uploaded</span>
+              </div>
+            )}
           </div>
           {(inspection?.photo_count > 0 || inspection?.video_count > 0) && (
             <div className="flex items-center gap-4 text-sm font-semibold text-gray-400">
@@ -336,6 +343,11 @@ export default function InspectPage() {
         )}
         {phase === 'uploading' && (
           <UploadProgress steps={uploadSteps} currentPct={uploadPct} errorMsg={uploadError} />
+        )}
+        {phase === 'uploading' && uploadError && (
+          <button onClick={() => navigate('/')} className="btn-ghost w-auto px-8 mx-auto">
+            <Home className="w-5 h-5" /> Go Home
+          </button>
         )}
       </main>
     </div>

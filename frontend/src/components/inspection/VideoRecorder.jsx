@@ -162,6 +162,7 @@ export default function VideoRecorder({ onComplete }) {
   }
 
   function handleReRecord() {
+    if (!window.confirm('Re-record? This will delete the current video.')) return
     setVideoBlob(null)
     setCapturedPhotos([])
     setTotalSecs(0)
@@ -271,7 +272,7 @@ export default function VideoRecorder({ onComplete }) {
 
       {phase === 'ready' && (
         <>
-          <button onClick={handleStartRecording} className="btn-danger"><Video className="w-6 h-6" />Start Recording</button>
+          <button onClick={handleStartRecording} className="btn-primary"><Video className="w-6 h-6" />Start Recording</button>
           <p className="text-gray-500 text-xs text-center">The app will guide you around the vehicle step by step.</p>
         </>
       )}

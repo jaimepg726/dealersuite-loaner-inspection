@@ -4,7 +4,7 @@
  * Minimal training required for service drive porters.
  */
 import { useNavigate } from 'react-router-dom'
-import { Camera, LayoutDashboard, Power, Clock, KeyRound } from 'lucide-react'
+import { Camera, LayoutDashboard, Power, KeyRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -44,7 +44,7 @@ export default function PorterHome() {
 
       {/* Bug 2 fix: PageHeader renders the 👤 Name [Switch] chip from sessionStorage */}
       <PageHeader
-        title={`${getGreeting()}, ${user?.name?.split(' ')[0] || 'Porter'}`}
+        title={`${getGreeting()}, ${(currentUser?.name ?? user?.name)?.split(' ')[0] || 'Porter'}`}
         showBack={false}
         showUserChip={true}
       />
@@ -98,11 +98,7 @@ export default function PorterHome() {
       </main>
 
       {/* Footer: shift info + logout */}
-      <footer className="flex items-center justify-between px-6 pb-10">
-        <div className="flex items-center gap-2 text-gray-600 text-xs">
-          <Clock className="w-4 h-4" />
-          <span>Shift token valid 8 hours from login</span>
-        </div>
+      <footer className="flex items-center justify-end px-6 pb-10">
         <button
           onClick={handleLogout}
           className="w-10 h-10 bg-brand-mid border border-brand-accent rounded-xl

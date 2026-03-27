@@ -62,7 +62,7 @@ export default function SelectUserPage() {
 
   function saveAndContinue(user) {
     sessionStorage.setItem('currentUser', JSON.stringify({ name: user.name, role: user.role }))
-    navigate('/')
+    navigate('/scan')
   }
 
   return (
