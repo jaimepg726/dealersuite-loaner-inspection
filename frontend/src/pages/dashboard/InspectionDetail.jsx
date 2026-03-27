@@ -235,7 +235,7 @@ function VideoPlayer({ m }) {
 }
 
 // ── MediaGallery ──────────────────────────────────────────────────────────────
-function MediaGallery({ media, inspectionStatus }) {
+function MediaGallery({ media, inspectionStatus, inspectionType }) {
   const [modal, setModal] = useState(null)
 
   const photos = media.filter((m) => m.media_type === 'photo')
@@ -266,7 +266,9 @@ function MediaGallery({ media, inspectionStatus }) {
                           bg-brand-mid/60">
             <Video className="w-3.5 h-3.5 text-brand-blue" />
             <span className="text-sm font-bold text-brand-white">
-              {videos.length === 1 ? 'Walkround Video' : `Videos (${videos.length})`}
+              {videos.length === 1
+                ? (inspectionType === 'Condition' ? 'Condition Video' : 'Walkround Video')
+                : `Videos (${videos.length})`}
             </span>
           </div>
           {/* Video player(s) — constrained width so they feel intentional */}
@@ -318,6 +320,7 @@ const TYPE_COLOR = {
   Checkin:   'bg-green-900/50 text-green-400',
   Inventory: 'bg-purple-900/50 text-purple-400',
   Sales:     'bg-orange-900/50 text-orange-400',
+  Condition: 'bg-teal-900/50  text-teal-400',
 }
 
 const TYPE_ACCENT = {
@@ -325,6 +328,7 @@ const TYPE_ACCENT = {
   Checkin:   'bg-green-500',
   Inventory: 'bg-purple-500',
   Sales:     'bg-orange-500',
+  Condition: 'bg-teal-500',
 }
 
 const STATUS_COLOR = {
@@ -436,6 +440,13 @@ export default function InspectionDetail() {
                   </span>
                 )}
               </p>
+            ) : inspection.inspection_type === 'Condition' ? (
+              <div>
+                <p className="text-brand-white font-bold text-lg leading-tight">Customer Vehicle</p>
+                {inspection.vin_override && (
+                  <p className="text-gray-500 text-sm font-mono mt-0.5">VIN: {inspection.vin_override}</p>
+                )}
+              </div>
             ) : (
               <p className="text-gray-500 text-sm">Vehicle #{inspection.vehicle_id}</p>
             )}
@@ -496,7 +507,7 @@ export default function InspectionDetail() {
             <Camera className="w-4 h-4 text-brand-blue" />
             Inspection Media
           </h3>
-          <MediaGallery media={media} inspectionStatus={inspection.status} />
+          <MediaGallery media={media} inspectionStatus={inspection.status} inspectionType={inspection.inspection_type} />
         </div>
 
       </div>

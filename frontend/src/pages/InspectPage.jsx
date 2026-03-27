@@ -44,12 +44,12 @@ const TYPE_API_MAP = {
 }
 
 // ── Upload step builder ────────────────────────────────────────────────────────────────
-function makeSteps(hasVideo, photoCount) {
+function makeSteps(hasVideo, photoCount, isCondition = false) {
   const steps = []
-  if (hasVideo)   steps.push({ label: 'Uploading walkround video', status: 'pending' })
-  if (photoCount) steps.push({ label: `Uploading ${photoCount} damage photo${photoCount !== 1 ? 's' : ''}`, status: 'pending' })
-  steps.push({ label: 'Saving damage reports', status: 'pending' })
-  steps.push({ label: 'Completing inspection',  status: 'pending' })
+  if (hasVideo)      steps.push({ label: isCondition ? 'Uploading condition video' : 'Uploading walkround video', status: 'pending' })
+  if (photoCount)    steps.push({ label: `Uploading ${photoCount} damage photo${photoCount !== 1 ? 's' : ''}`, status: 'pending' })
+  if (!isCondition)  steps.push({ label: 'Saving damage reports', status: 'pending' })
+  steps.push({ label: 'Completing inspection', status: 'pending' })
   return steps
 }
 
@@ -150,7 +150,7 @@ export default function InspectPage() {
 
     const photoDmg   = damages.filter(d => d.photoBlob)
     const photoCount = photoDmg.length
-    const steps      = makeSteps(!!videoBlob, photoCount)
+    const steps      = makeSteps(!!videoBlob, photoCount, type === 'condition')
 
     setUploadSteps([...steps])
     setUploadError(null)
@@ -305,7 +305,11 @@ export default function InspectPage() {
       : `Vehicle #${vehicleId}`
 
   const phaseTitle = { recording: typeInfo.label, damage: 'Log Damage', uploading: 'Saving…' }[phase] || typeInfo.label
-  const ORDERED = ['recording', 'damage', 'uploading']
+  const isCondition = type === 'condition'
+  const ORDERED = isCondition ? ['recording', 'uploading'] : ['recording', 'damage', 'uploading']
+  const STEP_LABEL = isCondition
+    ? { recording: 'Step 1/2', uploading: 'Step 2/2' }
+    : { recording: 'Step 1/3', damage: 'Step 2/3', uploading: 'Step 3/3' }
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
@@ -323,7 +327,7 @@ export default function InspectPage() {
             </div>
           ))}
           <span className="text-gray-600 text-xs ml-2">
-            {{ recording: 'Step 1/3', damage: 'Step 2/3', uploading: 'Step 3/3' }[phase]}
+            {STEP_LABEL[phase]}
           </span>
         </div>
         {phase === 'recording' && <VideoRecorder onComplete={handleVideoComplete} />}

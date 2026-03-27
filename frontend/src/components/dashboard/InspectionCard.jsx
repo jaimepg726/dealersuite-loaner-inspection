@@ -11,6 +11,7 @@ const TYPE_COLOR = {
   Checkin:   'bg-green-900/50  text-green-400',
   Inventory: 'bg-purple-900/50 text-purple-400',
   Sales:     'bg-orange-900/50 text-orange-400',
+  Condition: 'bg-teal-900/50   text-teal-400',
 }
 
 // Left accent stripe colour per inspection type
@@ -19,6 +20,7 @@ const TYPE_ACCENT = {
   Checkin:   'bg-green-500',
   Inventory: 'bg-purple-500',
   Sales:     'bg-orange-500',
+  Condition: 'bg-teal-500',
 }
 
 const STATUS_COLOR = {
@@ -73,6 +75,8 @@ export default function InspectionCard({ inspection }) {
                 <span className="text-gray-500 font-normal ml-2">#{vehicle.loaner_number}</span>
               )}
             </p>
+          ) : inspection.inspection_type === 'Condition' ? (
+            <p className="text-teal-400 text-sm font-semibold">Customer Vehicle</p>
           ) : (
             <p className="text-gray-500 text-sm">Vehicle #{inspection.vehicle_id}</p>
           )}

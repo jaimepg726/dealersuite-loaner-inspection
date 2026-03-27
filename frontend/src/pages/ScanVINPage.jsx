@@ -188,7 +188,7 @@ export default function ScanVINPage() {
             </p>
             <BarcodeScanner
               onDetected={handleVINDetected}
-              active={vinMethod === 'barcode' && !loanerLoading}
+              active={vinMethod === 'barcode' && !loanerLoading && !notFound}
             />
           </div>
         )}
@@ -200,7 +200,7 @@ export default function ScanVINPage() {
             </p>
             <OCRScanner
               onDetected={handleVINDetected}
-              active={vinMethod === 'ocr' && !loanerLoading}
+              active={vinMethod === 'ocr' && !loanerLoading && !notFound}
             />
           </div>
         )}
