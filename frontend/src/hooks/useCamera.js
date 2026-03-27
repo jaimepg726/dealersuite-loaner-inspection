@@ -58,8 +58,9 @@ export default function useCamera() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode:  { ideal: 'environment' },  // rear camera
-          width:       { ideal: 1280 },
-          height:      { ideal: 720 },
+          width:       { ideal: 1920 },
+          height:      { ideal: 1080 },
+          frameRate:   { ideal: 30 },
         },
         audio: false,
       })
