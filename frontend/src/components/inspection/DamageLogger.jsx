@@ -26,6 +26,28 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
+import { t, getLang } from '../../utils/lang'
+
+// Display labels for damage locations — Spanish (internal values stay English for API)
+const LOCATIONS_ES = {
+  'Front':           'Frente',
+  'Rear':            'Trasero',
+  'Driver Front':    'Cond. Delantero',
+  'Driver Rear':     'Cond. Trasero',
+  'Passenger Front': 'Pas. Delantero',
+  'Passenger Rear':  'Pas. Trasero',
+  'Roof':            'Techo',
+  'Hood':            'Capó',
+  'Trunk':           'Cajuela',
+  'Interior':        'Interior',
+  'Windshield':      'Parabrisas',
+  'Other':           'Otro',
+}
+
+function displayLoc(loc) {
+  if (!loc) return loc
+  return getLang() === 'es' ? (LOCATIONS_ES[loc] || loc) : loc
+}
 
 const LOCATIONS = [
   'Front',
@@ -82,11 +104,11 @@ function DamageItem({ item, index, onUpdate, onRemove }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-brand-white font-bold text-sm">
-            Damage #{index + 1}
+            {t('Damage', 'Daño')} #{index + 1}
           </p>
           {item.location && (
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${locCls}`}>
-              {item.location}
+              {displayLoc(item.location)}
             </span>
           )}
         </div>
@@ -111,7 +133,7 @@ function DamageItem({ item, index, onUpdate, onRemove }) {
           {/* Location picker */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-              Location *
+              {t('Location *', 'Ubicación *')}
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {LOCATIONS.map(loc => {
@@ -124,7 +146,7 @@ function DamageItem({ item, index, onUpdate, onRemove }) {
                     onClick={() => onUpdate(index, { location: loc })}
                     className={`text-xs font-bold px-2 py-2 rounded-xl border transition-colors ${cls}`}
                   >
-                    {loc}
+                    {displayLoc(loc)}
                   </button>
                 )
               })}
@@ -134,7 +156,7 @@ function DamageItem({ item, index, onUpdate, onRemove }) {
           {/* Photo */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-              Photo
+              {t('Photo', 'Foto')}
             </p>
             {item.previewUrl ? (
               <div className="relative">
@@ -159,7 +181,7 @@ function DamageItem({ item, index, onUpdate, onRemove }) {
                            text-gray-500 active:scale-95 transition-transform"
               >
                 <Camera className="w-6 h-6" />
-                <span className="text-xs font-semibold">Tap to take photo</span>
+                <span className="text-xs font-semibold">{t('Tap to take photo', 'Toque para tomar foto')}</span>
               </button>
             )}
             <input
@@ -175,12 +197,12 @@ function DamageItem({ item, index, onUpdate, onRemove }) {
           {/* Description */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-              Description (optional)
+              {t('Description (optional)', 'Descripción (opcional)')}
             </p>
             <textarea
               value={item.description}
               onChange={e => onUpdate(index, { description: e.target.value })}
-              placeholder="Describe the damage…"
+              placeholder={t('Describe the damage…', 'Describa el daño…')}
               rows={2}
               className="w-full bg-brand-dark border border-brand-accent rounded-xl
                          px-4 py-3 text-brand-white placeholder-gray-600 resize-none
@@ -236,11 +258,11 @@ export default function DamageLogger({ capturedPhotos = [], onComplete, onSkip }
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-extrabold text-brand-white">Log Damage</h3>
+          <h3 className="text-lg font-extrabold text-brand-white">{t('Log Damage', 'Registrar Daños')}</h3>
           <p className="text-gray-500 text-sm">
             {hasItems
-              ? `${items.length} item${items.length !== 1 ? 's' : ''} — tap to edit`
-              : 'No damage items yet'}
+              ? t(`${items.length} item${items.length !== 1 ? 's' : ''} — tap to edit`, `${items.length} elemento${items.length !== 1 ? 's' : ''} — toque para editar`)
+              : t('No damage items yet', 'Sin daños aún')}
           </p>
         </div>
         <span className="text-xs font-bold bg-brand-yellow/20 border border-yellow-700
@@ -270,7 +292,7 @@ export default function DamageLogger({ capturedPhotos = [], onComplete, onSkip }
                    font-bold active:scale-95 transition-transform"
       >
         <Plus className="w-5 h-5" />
-        Add Damage Item
+        {t('Add Damage Item', 'Agregar Daño')}
       </button>
 
       {/* Action buttons */}
@@ -278,18 +300,23 @@ export default function DamageLogger({ capturedPhotos = [], onComplete, onSkip }
         {hasItems && (
           <button onClick={handleSubmit} className="btn-primary">
             <AlertTriangle className="w-5 h-5" />
-            Submit {items.length} Damage Report{items.length !== 1 ? 's' : ''}
+            {t(
+              `Submit ${items.length} Damage Report${items.length !== 1 ? 's' : ''}`,
+              `Enviar ${items.length} Reporte${items.length !== 1 ? 's' : ''} de Daños`
+            )}
           </button>
         )}
 
         <button onClick={onSkip} className="btn-success">
           <CheckCircle className="w-5 h-5" />
-          {hasItems ? 'Skip Damage & Complete' : 'No Damage Found — Complete'}
+          {hasItems
+            ? t('Skip Damage & Complete', 'Omitir Daños y Completar')
+            : t('No Damage Found — Complete', 'Sin Daños — Completar')}
         </button>
       </div>
 
       <p className="text-gray-600 text-xs text-center">
-        Tap "No Damage Found" if the vehicle is clean.
+        {t('Tap "No Damage Found" if the vehicle is clean.', 'Toque "Sin Daños" si el vehículo está limpio.')}
       </p>
     </div>
   )

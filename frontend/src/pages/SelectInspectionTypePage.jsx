@@ -7,41 +7,44 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, LogIn, Package, Tag } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
+import { t } from '../utils/lang'
 
-const TYPES = [
-  {
-    type:    'checkout',
-    label:   'Checkout',
-    sub:     'Customer taking loaner',
-    Icon:    LogOut,
-    color:   'bg-brand-blue hover:bg-brand-blue/80',
-    iconBg:  'bg-white/20',
-  },
-  {
-    type:    'checkin',
-    label:   'Check-In',
-    sub:     'Customer returning loaner',
-    Icon:    LogIn,
-    color:   'bg-brand-green hover:bg-brand-green/80',
-    iconBg:  'bg-white/20',
-  },
-  {
-    type:    'inventory',
-    label:   'Inventory',
-    sub:     'Stock vehicle inspection',
-    Icon:    Package,
-    color:   'bg-purple-700 hover:bg-purple-600',
-    iconBg:  'bg-white/20',
-  },
-  {
-    type:    'sales',
-    label:   'Sales',
-    sub:     'Sales department vehicle',
-    Icon:    Tag,
-    color:   'bg-orange-700 hover:bg-orange-600',
-    iconBg:  'bg-white/20',
-  },
-]
+function getTypes() {
+  return [
+    {
+      type:   'checkout',
+      label:  t('Checkout', 'Entrega'),
+      sub:    t('Customer taking loaner', 'Cliente lleva el loaner'),
+      Icon:   LogOut,
+      color:  'bg-brand-blue hover:bg-brand-blue/80',
+      iconBg: 'bg-white/20',
+    },
+    {
+      type:   'checkin',
+      label:  t('Check-In', 'Devolución'),
+      sub:    t('Customer returning loaner', 'Cliente devuelve el loaner'),
+      Icon:   LogIn,
+      color:  'bg-brand-green hover:bg-brand-green/80',
+      iconBg: 'bg-white/20',
+    },
+    {
+      type:   'inventory',
+      label:  t('Inventory', 'Inventario'),
+      sub:    t('Stock vehicle inspection', 'Inspección de vehículo de inventario'),
+      Icon:   Package,
+      color:  'bg-purple-700 hover:bg-purple-600',
+      iconBg: 'bg-white/20',
+    },
+    {
+      type:   'sales',
+      label:  t('Sales', 'Ventas'),
+      sub:    t('Sales department vehicle', 'Vehículo del depto. de ventas'),
+      Icon:   Tag,
+      color:  'bg-orange-700 hover:bg-orange-600',
+      iconBg: 'bg-white/20',
+    },
+  ]
+}
 
 export default function SelectInspectionTypePage() {
   const navigate  = useNavigate()
@@ -58,10 +61,12 @@ export default function SelectInspectionTypePage() {
     navigate(`/inspect/${type}/${vehicle.id}`, { state: { vehicle } })
   }
 
+  const TYPES = getTypes()
+
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
       <PageHeader
-        title="Inspection Type"
+        title={t('Inspection Type', 'Tipo de Inspección')}
         subtitle={`${vehicle.year} ${vehicle.make} ${vehicle.model} · ${vehicle.loaner_number || vehicle.vin.slice(-6)}`}
         showBack
       />
@@ -69,7 +74,7 @@ export default function SelectInspectionTypePage() {
       <main className="flex-1 flex flex-col justify-center gap-4 px-5 pb-10">
 
         <p className="text-gray-400 text-sm text-center mb-2">
-          What type of inspection is this?
+          {t('What type of inspection is this?', '¿Qué tipo de inspección es esta?')}
         </p>
 
         {TYPES.map(({ type, label, sub, Icon, color, iconBg }) => (

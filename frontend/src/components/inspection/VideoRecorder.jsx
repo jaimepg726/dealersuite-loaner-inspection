@@ -24,6 +24,20 @@ import {
 } from 'lucide-react'
 import useCamera from '../../hooks/useCamera'
 import { WALKROUND_STEPS, MIN_RECORD_SECONDS } from '../../config/walkroundSteps'
+import { t, getLang } from '../../utils/lang'
+
+// Spanish walkround step labels and hints (same order as WALKROUND_STEPS)
+const WALKROUND_STEPS_ES = [
+  { label: 'Rueda Delantera Conductor',  hint: 'Acérquese — muestre la rueda completa'    },
+  { label: 'Lado Conductor',             hint: 'Mantenga nivel a la altura de la manija'  },
+  { label: 'Rueda Trasera Conductor',    hint: 'Acérquese — muestre la rueda completa'    },
+  { label: 'Parachoques Trasero',        hint: 'Ancho completo — mantenga nivel'          },
+  { label: 'Rueda Trasera Pasajero',     hint: 'Acérquese — muestre la rueda completa'    },
+  { label: 'Lado Pasajero',              hint: 'Pase lento — de frente a atrás'           },
+  { label: 'Rueda Delantera Pasajero',   hint: 'Acérquese — muestre la rueda completa'    },
+  { label: 'Parachoques Delantero',      hint: 'Retroceda — capture todo el ancho'        },
+  { label: 'Parabrisas y Capó',          hint: 'Retroceda — capture vidrio y capó completo' },
+]
 
 // ── Top-down car position indicator ────────────────────────────────────────
 // Renders a minimal SVG car outline with a dot showing the current step zone.
@@ -162,7 +176,7 @@ export default function VideoRecorder({ onComplete }) {
   }
 
   function handleReRecord() {
-    if (!window.confirm('Re-record? This will delete the current video.')) return
+    if (!window.confirm(t('Re-record? This will delete the current video.', '¿Grabar de nuevo? Esto borrará el video actual.'))) return
     setVideoBlob(null)
     setCapturedPhotos([])
     setTotalSecs(0)
@@ -186,7 +200,9 @@ export default function VideoRecorder({ onComplete }) {
     cam.startCamera().then(() => setPhase('ready')).catch(() => setPhase('error'))
   }
 
-  const currentStep  = WALKROUND_STEPS[stepIndex] ?? WALKROUND_STEPS[WALKROUND_STEPS.length - 1]
+  const _step        = WALKROUND_STEPS[stepIndex] ?? WALKROUND_STEPS[WALKROUND_STEPS.length - 1]
+  const _stepEs      = WALKROUND_STEPS_ES[stepIndex] ?? WALKROUND_STEPS_ES[WALKROUND_STEPS_ES.length - 1]
+  const currentStep  = getLang() === 'es' ? { ..._step, label: _stepEs.label, hint: _stepEs.hint } : _step
   const stepProgress = stepSecsLeft === 0 ? 1 : 1 - (stepSecsLeft / currentStep.duration)
   const isLastStep   = stepIndex >= WALKROUND_STEPS.length - 1
   const allDone      = isLastStep && stepSecsLeft === 0
@@ -200,15 +216,15 @@ export default function VideoRecorder({ onComplete }) {
         {phase === 'loading' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70">
             <Loader className="w-10 h-10 text-brand-blue animate-spin" />
-            <p className="text-white text-sm font-semibold">Starting camera…</p>
+            <p className="text-white text-sm font-semibold">{t('Starting camera…', 'Iniciando cámara…')}</p>
           </div>
         )}
         {phase === 'error' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
             <AlertCircle className="w-10 h-10 text-red-400" />
-            <p className="text-white font-bold">Camera unavailable</p>
+            <p className="text-white font-bold">{t('Camera unavailable', 'Cámara no disponible')}</p>
             <p className="text-gray-400 text-sm">{cam.cameraError}</p>
-            <button onClick={handleRetry} className="btn-ghost text-sm mt-2 w-auto px-6"><RefreshCw className="w-4 h-4" /> Try Again</button>
+            <button onClick={handleRetry} className="btn-ghost text-sm mt-2 w-auto px-6"><RefreshCw className="w-4 h-4" /> {t('Try Again', 'Intentar de nuevo')}</button>
           </div>
         )}
         {phase === 'recording' && (
@@ -264,37 +280,37 @@ export default function VideoRecorder({ onComplete }) {
         {phase === 'preview' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
             <CheckCircle className="w-12 h-12 text-green-400" />
-            <p className="text-white font-bold text-lg">Video Recorded</p>
-            {capturedPhotos.length > 0 && <p className="text-gray-300 text-sm">{capturedPhotos.length} photo{capturedPhotos.length !== 1 ? 's' : ''} captured</p>}
+            <p className="text-white font-bold text-lg">{t('Video Recorded', 'Video Grabado')}</p>
+            {capturedPhotos.length > 0 && <p className="text-gray-300 text-sm">{t(`${capturedPhotos.length} photo${capturedPhotos.length !== 1 ? 's' : ''} captured`, `${capturedPhotos.length} foto${capturedPhotos.length !== 1 ? 's' : ''} capturada${capturedPhotos.length !== 1 ? 's' : ''}`)}</p>}
           </div>
         )}
       </div>
 
       {phase === 'ready' && (
         <>
-          <button onClick={handleStartRecording} className="btn-primary"><Video className="w-6 h-6" />Start Recording</button>
-          <p className="text-gray-500 text-xs text-center">The app will guide you around the vehicle step by step.</p>
+          <button onClick={handleStartRecording} className="btn-primary"><Video className="w-6 h-6" />{t('Start Recording', 'Iniciar Grabación')}</button>
+          <p className="text-gray-500 text-xs text-center">{t('The app will guide you around the vehicle step by step.', 'La app lo guiará por el vehículo paso a paso.')}</p>
         </>
       )}
       {phase === 'recording' && (
         <>
           <div className="flex gap-3">
             <button onClick={handleCapturePhoto} className="flex-1 bg-brand-mid border border-brand-accent text-brand-white font-bold text-base py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform">
-              <Camera className="w-5 h-5" />Photo
+              <Camera className="w-5 h-5" />{t('Photo', 'Foto')}
             </button>
             <button onClick={handleStopRecording} disabled={!canStop} className="flex-[2] btn-danger disabled:opacity-40 disabled:pointer-events-none">
               <Square className="w-5 h-5 fill-white" />
-              {canStop ? 'Stop Recording' : `Stop (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`}
+              {canStop ? t('Stop Recording', 'Detener Grabación') : t(`Stop (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`, `Detener (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`)}
             </button>
           </div>
-          {!canStop && <p className="text-yellow-500 text-xs text-center font-semibold">⏱ Follow the steps above — Stop unlocks after {MIN_RECORD_SECONDS}s</p>}
+          {!canStop && <p className="text-yellow-500 text-xs text-center font-semibold">{t(`⏱ Follow the steps above — Stop unlocks after ${MIN_RECORD_SECONDS}s`, `⏱ Siga los pasos — Detener se habilita después de ${MIN_RECORD_SECONDS}s`)}</p>}
         </>
       )}
       {phase === 'preview' && (
         <div className="flex gap-3">
-          <button onClick={handleReRecord} className="flex-1 btn-ghost"><RefreshCw className="w-5 h-5" />Re-record</button>
+          <button onClick={handleReRecord} className="flex-1 btn-ghost"><RefreshCw className="w-5 h-5" />{t('Re-record', 'Volver a grabar')}</button>
           <button onClick={handleContinue} disabled={continuing} className="flex-[2] btn-success disabled:opacity-50 disabled:pointer-events-none">
-            <CheckCircle className="w-5 h-5" />Continue
+            <CheckCircle className="w-5 h-5" />{t('Continue', 'Continuar')}
           </button>
         </div>
       )}

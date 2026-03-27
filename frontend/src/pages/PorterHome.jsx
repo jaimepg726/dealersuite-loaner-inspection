@@ -7,12 +7,13 @@ import { useNavigate } from 'react-router-dom'
 import { Camera, LayoutDashboard, Power, KeyRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/ui/PageHeader'
+import { t } from '../utils/lang'
 
 function getGreeting() {
   const hour = new Date().getHours()
-  if (hour < 12) return 'Good morning'
-  if (hour < 17) return 'Good afternoon'
-  return 'Good evening'
+  if (hour < 12) return t('Good morning', 'Buenos días')
+  if (hour < 17) return t('Good afternoon', 'Buenas tardes')
+  return t('Good evening', 'Buenas noches')
 }
 
 export default function PorterHome() {
@@ -62,8 +63,8 @@ export default function PorterHome() {
             <Camera className="w-9 h-9 text-white" strokeWidth={1.5} />
           </div>
           <div className="text-left">
-            <p className="text-white text-2xl font-extrabold leading-tight">New Inspection</p>
-            <p className="text-white/70 text-sm mt-0.5">Start vehicle walkaround</p>
+            <p className="text-white text-2xl font-extrabold leading-tight">{t('New Inspection', 'Nueva Inspección')}</p>
+            <p className="text-white/70 text-sm mt-0.5">{t('Start vehicle walkaround', 'Iniciar recorrido del vehículo')}</p>
           </div>
         </button>
 
@@ -77,8 +78,8 @@ export default function PorterHome() {
             <LayoutDashboard className="w-9 h-9 text-gray-300" strokeWidth={1.5} />
           </div>
           <div className="text-left">
-            <p className="text-brand-white text-2xl font-extrabold leading-tight">Manager Review</p>
-            <p className="text-gray-400 text-sm mt-0.5">View inspections &amp; reports</p>
+            <p className="text-brand-white text-2xl font-extrabold leading-tight">{t('Manager Review', 'Revisión del Gerente')}</p>
+            <p className="text-gray-400 text-sm mt-0.5">{t('View inspections & reports', 'Ver inspecciones y reportes')}</p>
           </div>
         </button>
 
@@ -91,7 +92,7 @@ export default function PorterHome() {
                        active:text-gray-300 transition-colors select-none"
           >
             <KeyRound className="w-4 h-4" />
-            Change PIN
+            {t('Change PIN', 'Cambiar PIN')}
           </button>
         )}
 

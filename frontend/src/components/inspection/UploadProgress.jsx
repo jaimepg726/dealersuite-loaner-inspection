@@ -11,6 +11,7 @@
  */
 
 import { CheckCircle, Loader, AlertCircle, Circle, Upload } from 'lucide-react'
+import { t } from '../../utils/lang'
 
 function StepRow({ step }) {
   const icon = {
@@ -50,9 +51,11 @@ export default function UploadProgress({ steps = [], currentPct = 0, errorMsg = 
           <Upload className="w-6 h-6 text-brand-blue" />
         </div>
         <div>
-          <p className="text-brand-white font-extrabold">Saving Inspection</p>
+          <p className="text-brand-white font-extrabold">{t('Saving Inspection', 'Guardando Inspección')}</p>
           <p className="text-gray-500 text-sm">
-            {errorMsg ? 'Upload failed' : `${doneCount} of ${totalCount} steps complete`}
+            {errorMsg
+              ? t('Upload failed', 'Error al subir')
+              : t(`${doneCount} of ${totalCount} steps complete`, `${doneCount} de ${totalCount} pasos completados`)}
           </p>
         </div>
       </div>
@@ -78,7 +81,7 @@ export default function UploadProgress({ steps = [], currentPct = 0, errorMsg = 
       {!errorMsg && currentPct > 0 && currentPct < 100 && (
         <div className="flex flex-col gap-1">
           <div className="flex justify-between text-xs text-gray-500">
-            <span>Uploading…</span>
+            <span>{t('Uploading…', 'Subiendo…')}</span>
             <span>{currentPct}%</span>
           </div>
           <div className="w-full h-1.5 bg-brand-accent rounded-full overflow-hidden">

@@ -22,8 +22,8 @@ import PinEntryModal from '../components/ui/PinEntryModal'
 // PINs default to '0000' — overridden by localStorage key `pin_<name>` if set.
 // Use getStoredPin() everywhere so ChangePinPage changes take effect immediately.
 const USERS = [
-  { name: 'John',    role: 'porter'  },
-  { name: 'Basilio', role: 'porter'  },
+  { name: 'John',    role: 'porter',  lang: 'es' },
+  { name: 'Basilio', role: 'porter',  lang: 'es' },
   { name: 'Ronald',  role: 'advisor', pin: '0000' },
   { name: 'Octavio', role: 'advisor', pin: '0000' },
   { name: 'Jaime',   role: 'manager', pin: '0000' },
@@ -61,7 +61,11 @@ export default function SelectUserPage() {
   }
 
   function saveAndContinue(user) {
-    sessionStorage.setItem('currentUser', JSON.stringify({ name: user.name, role: user.role }))
+    sessionStorage.setItem('currentUser', JSON.stringify({
+      name: user.name,
+      role: user.role,
+      lang: user.lang || 'en',
+    }))
     navigate('/scan')
   }
 

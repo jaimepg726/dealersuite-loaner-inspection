@@ -13,6 +13,7 @@
  */
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, User } from 'lucide-react'
+import { t } from '../../utils/lang'
 
 export default function PageHeader({
   title,
@@ -62,7 +63,7 @@ export default function PageHeader({
             onClick={handleSwitch}
             className="text-brand-blue text-xs font-bold ml-1 shrink-0 active:opacity-60"
           >
-            Switch
+            {t('Switch', 'Cambiar')}
           </button>
         </div>
       )}

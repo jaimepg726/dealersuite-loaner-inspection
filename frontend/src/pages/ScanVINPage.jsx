@@ -18,11 +18,12 @@ import BarcodeScanner      from '../components/inspection/BarcodeScanner'
 import OCRScanner          from '../components/inspection/OCRScanner'
 import ManualVINEntry      from '../components/inspection/ManualVINEntry'
 import useVehicleLookup    from '../hooks/useVehicleLookup'
+import { t } from '../utils/lang'
 
 const VIN_METHODS = [
-  { id: 'barcode', label: 'Barcode', Icon: ScanBarcode },
-  { id: 'ocr',     label: 'Camera',  Icon: Camera      },
-  { id: 'manual',  label: 'Manual',  Icon: Keyboard    },
+  { id: 'barcode', Icon: ScanBarcode },
+  { id: 'ocr',     Icon: Camera      },
+  { id: 'manual',  Icon: Keyboard    },
 ]
 
 export default function ScanVINPage() {
@@ -61,13 +62,13 @@ export default function ScanVINPage() {
   }
 
   // Full-page loading only for VIN scanner lookups (barcode/OCR/manual)
-  if (loading && !loanerLoading) return <LoadingScreen message={`Looking up ${scanned}…`} />
+  if (loading && !loanerLoading) return <LoadingScreen message={t(`Looking up ${scanned}…`, `Buscando ${scanned}…`)} />
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col">
       <PageHeader
-        title="New Inspection"
-        subtitle="Identify vehicle to begin"
+        title={t('New Inspection', 'Nueva Inspección')}
+        subtitle={t('Identify vehicle to begin', 'Identifique el vehículo para comenzar')}
         showBack
       />
 
@@ -78,11 +79,14 @@ export default function ScanVINPage() {
           <div className="relative overflow-hidden bg-brand-mid border border-teal-700/60 rounded-2xl px-5 py-4">
             <div className="absolute left-0 inset-y-0 w-1 bg-teal-500 rounded-l-2xl" />
             <p className="text-teal-300 font-extrabold text-sm">
-              Vehicle not found in loaner fleet
+              {t('Vehicle not found in loaner fleet', 'Vehículo no encontrado en la flota')}
             </p>
             <p className="text-gray-400 text-xs mt-0.5 font-mono tracking-wider">{scanned}</p>
             <p className="text-gray-400 text-xs mt-2">
-              You can still record a condition video to document this vehicle's current state.
+              {t(
+                "You can still record a condition video to document this vehicle's current state.",
+                'Puede grabar un video de condición para documentar el estado actual del vehículo.'
+              )}
             </p>
             <button
               onClick={() => navigate('/inspect/condition/0', { state: { conditionVin: scanned } })}
@@ -91,13 +95,13 @@ export default function ScanVINPage() {
                          rounded-xl py-3 px-4"
             >
               <Video className="w-4 h-4" />
-              Continue as Condition Video
+              {t('Continue as Condition Video', 'Continuar como Video de Condición')}
             </button>
             <button
               onClick={() => { setScanned(null); reset() }}
               className="mt-2 w-full text-gray-500 text-xs underline"
             >
-              Try a different VIN
+              {t('Try a different VIN', 'Intentar un VIN diferente')}
             </button>
           </div>
         )}
@@ -110,7 +114,7 @@ export default function ScanVINPage() {
               onClick={() => { setScanned(null); reset() }}
               className="mt-3 text-red-400 underline text-sm"
             >
-              Try again
+              {t('Try again', 'Intentar de nuevo')}
             </button>
           </div>
         )}
@@ -120,10 +124,13 @@ export default function ScanVINPage() {
           <div>
             <h3 className="text-brand-white font-extrabold text-base flex items-center gap-2">
               <Hash className="w-5 h-5 text-brand-blue" />
-              Loaner Number
+              {t('Loaner Number', 'Número de Loaner')}
             </h3>
             <p className="text-gray-500 text-xs mt-0.5">
-              Enter the number printed on the key tag or dashboard sticker
+              {t(
+                'Enter the number printed on the key tag or dashboard sticker',
+                'Ingrese el número del llavero o pegatina del tablero'
+              )}
             </p>
           </div>
           <form onSubmit={lookupVehicleByLoanerNumber} className="flex flex-col gap-3">
@@ -131,7 +138,7 @@ export default function ScanVINPage() {
               type="text"
               value={loanerInput}
               onChange={(e) => setLoanerInput(e.target.value)}
-              placeholder="Enter Loaner #"
+              placeholder={t('Enter Loaner #', 'Ingresar # de Loaner')}
               disabled={loanerLoading}
               className="w-full bg-brand-mid border border-brand-accent rounded-2xl
                          px-4 py-4 text-brand-white text-xl font-bold text-center
@@ -149,7 +156,7 @@ export default function ScanVINPage() {
               ) : (
                 <Hash className="w-5 h-5" />
               )}
-              {loanerLoading ? 'Looking up…' : 'Look Up Loaner'}
+              {loanerLoading ? t('Looking up…', 'Buscando…') : t('Look Up Loaner', 'Buscar Loaner')}
             </button>
           </form>
         </div>
@@ -158,33 +165,41 @@ export default function ScanVINPage() {
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-brand-accent" />
           <span className="text-gray-600 text-xs font-semibold tracking-widest uppercase">
-            or scan VIN
+            {t('or scan VIN', 'o escanear VIN')}
           </span>
           <div className="flex-1 h-px bg-brand-accent" />
         </div>
 
         {/* ── VIN method sub-tabs ───────────────────────────────────────── */}
         <div className="flex gap-2">
-          {VIN_METHODS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => { setVinMethod(id); setScanned(null); reset() }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
-                           text-xs font-bold transition-colors border
-                           ${vinMethod === id
-                             ? 'bg-brand-blue/20 border-brand-blue text-brand-blue'
-                             : 'border-brand-accent text-gray-500'}`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </button>
-          ))}
+          {VIN_METHODS.map(({ id, Icon }) => {
+            const label = id === 'barcode' ? t('Barcode', 'Código')
+                        : id === 'ocr'     ? t('Camera', 'Cámara')
+                        :                    t('Manual', 'Manual')
+            return (
+              <button
+                key={id}
+                onClick={() => { setVinMethod(id); setScanned(null); reset() }}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
+                             text-xs font-bold transition-colors border
+                             ${vinMethod === id
+                               ? 'bg-brand-blue/20 border-brand-blue text-brand-blue'
+                               : 'border-brand-accent text-gray-500'}`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            )
+          })}
         </div>
 
         {vinMethod === 'barcode' && (
           <div className="flex flex-col gap-3">
             <p className="text-gray-400 text-sm text-center">
-              Point rear camera at the VIN barcode on the windshield or door jamb
+              {t(
+                'Point rear camera at the VIN barcode on the windshield or door jamb',
+                'Apunte la cámara trasera al código VIN en el parabrisas o puerta'
+              )}
             </p>
             <BarcodeScanner
               onDetected={handleVINDetected}
@@ -196,7 +211,10 @@ export default function ScanVINPage() {
         {vinMethod === 'ocr' && (
           <div className="flex flex-col gap-3">
             <p className="text-gray-400 text-sm text-center">
-              Point at the VIN number on the dashboard or door sticker, then tap Scan
+              {t(
+                'Point at the VIN number on the dashboard or door sticker, then tap Scan',
+                'Apunte al número VIN en el tablero o pegatina, luego toque Escanear'
+              )}
             </p>
             <OCRScanner
               onDetected={handleVINDetected}

@@ -17,6 +17,7 @@ import {
   CheckCircle, Loader, AlertCircle, ExternalLink, Home,
 } from 'lucide-react'
 import api from '../utils/api'
+import { t } from '../utils/lang'
 import PageHeader from '../components/ui/PageHeader'
 import useInspection from '../hooks/useInspection'
 import VideoRecorder from '../components/inspection/VideoRecorder'
@@ -24,14 +25,16 @@ import DamageLogger from '../components/inspection/DamageLogger'
 import UploadProgress from '../components/inspection/UploadProgress'
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner'
 
-// ── Type config ───────────────────────────────────────────────────────────────────
-const TYPE_LABELS = {
-  checkout:   { label: 'Checkout Inspection',  color: 'text-brand-blue' },
-  checkin:    { label: 'Check-In Inspection',   color: 'text-brand-green' },
-  inventory:  { label: 'Inventory Inspection',  color: 'text-purple-400' },
-  sales:      { label: 'Sales Inspection',      color: 'text-orange-400' },
-  condition:  { label: 'Condition Inspection',  color: 'text-teal-400' },
-  inspection: { label: 'Inspection',            color: 'text-gray-300' },
+// ── Type config (called at render time so t() reads current lang) ──────────────
+function getTypeLabels() {
+  return {
+    checkout:   { label: t('Checkout Inspection',  'Inspección de Entrega'),    color: 'text-brand-blue' },
+    checkin:    { label: t('Check-In Inspection',   'Inspección de Devolución'), color: 'text-brand-green' },
+    inventory:  { label: t('Inventory Inspection',  'Inspección de Inventario'), color: 'text-purple-400' },
+    sales:      { label: t('Sales Inspection',      'Inspección de Ventas'),     color: 'text-orange-400' },
+    condition:  { label: t('Condition Inspection',  'Inspección de Condición'),  color: 'text-teal-400' },
+    inspection: { label: t('Inspection',            'Inspección'),               color: 'text-gray-300' },
+  }
 }
 
 const TYPE_API_MAP = {
@@ -46,10 +49,16 @@ const TYPE_API_MAP = {
 // ── Upload step builder ────────────────────────────────────────────────────────────────
 function makeSteps(hasVideo, photoCount, isCondition = false) {
   const steps = []
-  if (hasVideo)      steps.push({ label: isCondition ? 'Uploading condition video' : 'Uploading walkround video', status: 'pending' })
-  if (photoCount)    steps.push({ label: `Uploading ${photoCount} damage photo${photoCount !== 1 ? 's' : ''}`, status: 'pending' })
-  if (!isCondition)  steps.push({ label: 'Saving damage reports', status: 'pending' })
-  steps.push({ label: 'Completing inspection', status: 'pending' })
+  if (hasVideo)      steps.push({ label: isCondition
+    ? t('Uploading condition video', 'Subiendo video de condición')
+    : t('Uploading walkround video', 'Subiendo video de recorrido'),
+    status: 'pending' })
+  if (photoCount)    steps.push({ label: t(
+    `Uploading ${photoCount} damage photo${photoCount !== 1 ? 's' : ''}`,
+    `Subiendo ${photoCount} foto${photoCount !== 1 ? 's' : ''} de daños`
+  ), status: 'pending' })
+  if (!isCondition)  steps.push({ label: t('Saving damage reports', 'Guardando reportes de daños'), status: 'pending' })
+  steps.push({ label: t('Completing inspection', 'Completando inspección'), status: 'pending' })
   return steps
 }
 
@@ -63,6 +72,7 @@ export default function InspectPage() {
 
   const vehicle      = location.state?.vehicle ?? null
   const conditionVin = location.state?.conditionVin ?? null
+  const TYPE_LABELS  = getTypeLabels()
   const typeInfo = TYPE_LABELS[type] || TYPE_LABELS.checkout
   const apiType  = TYPE_API_MAP[type] || 'Checkout'
 
@@ -228,7 +238,7 @@ export default function InspectPage() {
       <FullScreenShell title={typeInfo.label} showBack>
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <Loader className="w-12 h-12 text-brand-blue animate-spin" />
-          <p className="text-gray-400 font-semibold">Starting inspection…</p>
+          <p className="text-gray-400 font-semibold">{t('Starting inspection…', 'Iniciando inspección…')}</p>
         </div>
       </FullScreenShell>
     )
@@ -239,9 +249,9 @@ export default function InspectPage() {
       <FullScreenShell title={typeInfo.label} showBack>
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
           <AlertCircle className="w-12 h-12 text-red-400" />
-          <p className="text-red-400 font-bold text-lg">Could Not Start</p>
-          <p className="text-gray-500 text-sm">{error || 'Unknown error — go back and try again'}</p>
-          <button onClick={() => navigate(-1)} className="btn-ghost w-auto px-8 mt-2">← Go Back</button>
+          <p className="text-red-400 font-bold text-lg">{t('Could Not Start', 'No se pudo iniciar')}</p>
+          <p className="text-gray-500 text-sm">{error || t('Unknown error — go back and try again', 'Error desconocido — vuelva e intente de nuevo')}</p>
+          <button onClick={() => navigate(-1)} className="btn-ghost w-auto px-8 mt-2">{t('← Go Back', '← Volver')}</button>
         </div>
       </FullScreenShell>
     )
@@ -249,33 +259,33 @@ export default function InspectPage() {
 
   if (phase === 'done') {
     return (
-      <FullScreenShell title="Inspection Complete">
+      <FullScreenShell title={t('Inspection Complete', 'Inspección Completa')}>
         <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 text-center">
           <div className="w-24 h-24 rounded-full bg-green-900/40 border-2 border-green-600 flex items-center justify-center">
             <CheckCircle className="w-14 h-14 text-green-400" />
           </div>
           <div>
-            <p className="text-2xl font-extrabold text-brand-white">All Done!</p>
+            <p className="text-2xl font-extrabold text-brand-white">{t('All Done!', '¡Todo listo!')}</p>
             <p className="text-gray-500 text-sm mt-1">
               {type === 'condition' && conditionVin
-                ? `Condition video recorded — VIN ${conditionVin}`
-                : `${inspection?.inspection_type} inspection saved`}
+                ? t(`Condition video recorded — VIN ${conditionVin}`, `Video de condición grabado — VIN ${conditionVin}`)
+                : t(`${inspection?.inspection_type} inspection saved`, 'Inspección guardada')}
             </p>
           </div>
           <div className="flex flex-col gap-2 w-full max-w-xs">
             <div className="flex items-center gap-3 bg-green-900/40 border border-green-700 rounded-xl px-4 py-2.5">
               <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-              <span className="text-green-300 text-sm font-semibold">Inspection Saved</span>
+              <span className="text-green-300 text-sm font-semibold">{t('Inspection Saved', 'Inspección Guardada')}</span>
             </div>
             {type !== 'condition' && inspection?.video_count === 0 ? (
               <div className="flex items-center gap-3 bg-yellow-900/40 border border-yellow-700 rounded-xl px-4 py-2.5">
                 <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0" />
-                <span className="text-yellow-300 text-sm font-semibold">Video may not have uploaded — check Drive</span>
+                <span className="text-yellow-300 text-sm font-semibold">{t('Video may not have uploaded — check Drive', 'El video puede no haberse subido — verifique Drive')}</span>
               </div>
             ) : (
               <div className="flex items-center gap-3 bg-green-900/40 border border-green-700 rounded-xl px-4 py-2.5">
                 <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-                <span className="text-green-300 text-sm font-semibold">Media Uploaded</span>
+                <span className="text-green-300 text-sm font-semibold">{t('Media Uploaded', 'Medios Subidos')}</span>
               </div>
             )}
           </div>
@@ -283,22 +293,25 @@ export default function InspectPage() {
             <div className="flex items-center gap-4 text-sm font-semibold text-gray-400">
               {inspection.photo_count > 0 && <span>📷 {inspection.photo_count} photo{inspection.photo_count !== 1 ? 's' : ''}</span>}
               {inspection.video_count > 0 && <span>🎥 {inspection.video_count} video{inspection.video_count !== 1 ? 's' : ''}</span>}
-              <span className="text-gray-600">saved to Drive</span>
+              <span className="text-gray-600">{t('saved to Drive', 'guardado en Drive')}</span>
             </div>
           )}
           {inspection?.drive_folder_url && (
             <a href={inspection.drive_folder_url} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm font-bold bg-green-900/30 border border-green-700 text-green-400 px-4 py-2.5 rounded-xl">
-              <ExternalLink className="w-4 h-4" /> Open Drive Folder
+              <ExternalLink className="w-4 h-4" /> {t('Open Drive Folder', 'Abrir Carpeta de Drive')}
             </a>
           )}
           {damagesRef.current.length > 0 && (
             <p className="text-yellow-400 text-sm font-semibold">
-              ⚠ {damagesRef.current.length} damage item{damagesRef.current.length !== 1 ? 's' : ''} logged
+              {t(
+                `⚠ ${damagesRef.current.length} damage item${damagesRef.current.length !== 1 ? 's' : ''} logged`,
+                `⚠ ${damagesRef.current.length} daño${damagesRef.current.length !== 1 ? 's' : ''} registrado${damagesRef.current.length !== 1 ? 's' : ''}`
+              )}
             </p>
           )}
           <button onClick={() => navigate('/')} className="btn-primary mt-2">
-            <Home className="w-5 h-5" /> Back to Home
+            <Home className="w-5 h-5" /> {t('Back to Home', 'Regresar al Inicio')}
           </button>
         </div>
       </FullScreenShell>
@@ -311,7 +324,11 @@ export default function InspectPage() {
       ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim()
       : `Vehicle #${vehicleId}`
 
-  const phaseTitle = { recording: typeInfo.label, damage: 'Log Damage', uploading: 'Saving…' }[phase] || typeInfo.label
+  const phaseTitle = {
+    recording: typeInfo.label,
+    damage:    t('Log Damage', 'Registrar Daños'),
+    uploading: t('Saving…', 'Guardando…'),
+  }[phase] || typeInfo.label
   const isCondition = type === 'condition'
   const ORDERED = isCondition ? ['recording', 'uploading'] : ['recording', 'damage', 'uploading']
   const STEP_LABEL = isCondition
@@ -346,7 +363,7 @@ export default function InspectPage() {
         )}
         {phase === 'uploading' && uploadError && (
           <button onClick={() => navigate('/')} className="btn-ghost w-auto px-8 mx-auto">
-            <Home className="w-5 h-5" /> Go Home
+            <Home className="w-5 h-5" /> {t('Go Home', 'Ir al Inicio')}
           </button>
         )}
       </main>
