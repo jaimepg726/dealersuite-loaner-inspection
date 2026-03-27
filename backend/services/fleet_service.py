@@ -29,16 +29,18 @@ REQUIRED_COLS = {"vin"}
 
 COLUMN_ALIASES = {
     # Normalised key -> possible CSV header names (includes real TSD Dealer export headers)
-    "loaner_number": ["loaner_number", "loaner number", "loaner#", "loaner_no", "unit", "unit_number", "unit number"],
+    # TSD exports use: Unit Number, VIN, License Plate, Year, Make, Model, Body Style,
+    #                  Current Miles, Current Fuel, Current Status
+    "loaner_number": ["loaner_number", "loaner number", "loaner#", "loaner_no", "unit", "unit_number", "unit number", "unit number"],
     "vin":           ["vin", "vin number", "vin#"],
     "year":          ["year", "model_year", "yr"],
     "make":          ["make", "manufacturer"],
     "model":         ["model", "model_name"],
-    "plate":         ["plate", "license_plate", "plate_number", "license", "license_plate"],
-    "mileage":       ["mileage", "miles", "odometer", "current_mileage", "current_miles"],
-    "status":        ["status", "vehicle_status", "current_status"],
-    "vehicle_type":  ["vehicle_type", "type", "category", "body_style"],
-    "fuel":          ["fuel", "fuel_level", "current_fuel"],
+    "plate":         ["plate", "license_plate", "plate_number", "license", "license plate", "license_plate"],
+    "mileage":       ["mileage", "miles", "odometer", "current_mileage", "current_miles", "current miles"],
+    "status":        ["status", "vehicle_status", "current_status", "current status"],
+    "vehicle_type":  ["vehicle_type", "type", "category", "body_style", "body style"],
+    "fuel":          ["fuel", "fuel_level", "current_fuel", "current fuel"],
 }
 
 # Status mapping from TSD export values to our internal values
