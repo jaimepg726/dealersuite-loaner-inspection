@@ -14,7 +14,7 @@ function getTypes() {
     {
       type:   'checkout',
       label:  t('Checkout', 'Entrega'),
-      sub:    t('Customer taking loaner', 'Cliente lleva el loaner'),
+      sub:    t('Customer taking loaner', 'Cliente lleva el préstamo'),
       Icon:   LogOut,
       color:  'bg-brand-blue hover:bg-brand-blue/80',
       iconBg: 'bg-white/20',
@@ -22,7 +22,7 @@ function getTypes() {
     {
       type:   'checkin',
       label:  t('Check-In', 'Devolución'),
-      sub:    t('Customer returning loaner', 'Cliente devuelve el loaner'),
+      sub:    t('Customer returning loaner', 'Cliente devuelve el préstamo'),
       Icon:   LogIn,
       color:  'bg-brand-green hover:bg-brand-green/80',
       iconBg: 'bg-white/20',

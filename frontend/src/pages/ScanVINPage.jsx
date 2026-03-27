@@ -95,7 +95,7 @@ export default function ScanVINPage() {
                          rounded-xl py-3 px-4"
             >
               <Video className="w-4 h-4" />
-              {t('Continue as Condition Video', 'Continuar como Video de Condición')}
+              {t('Continue as Condition Video', 'Video de Condición')}
             </button>
             <button
               onClick={() => { setScanned(null); reset() }}
@@ -124,7 +124,7 @@ export default function ScanVINPage() {
           <div>
             <h3 className="text-brand-white font-extrabold text-base flex items-center gap-2">
               <Hash className="w-5 h-5 text-brand-blue" />
-              {t('Loaner Number', 'Número de Loaner')}
+              {t('Loaner Number', 'Número de préstamo')}
             </h3>
             <p className="text-gray-500 text-xs mt-0.5">
               {t(
@@ -138,7 +138,7 @@ export default function ScanVINPage() {
               type="text"
               value={loanerInput}
               onChange={(e) => setLoanerInput(e.target.value)}
-              placeholder={t('Enter Loaner #', 'Ingresar # de Loaner')}
+              placeholder={t('Enter Loaner #', 'Ingresar # de préstamo')}
               disabled={loanerLoading}
               className="w-full bg-brand-mid border border-brand-accent rounded-2xl
                          px-4 py-4 text-brand-white text-xl font-bold text-center
@@ -156,7 +156,7 @@ export default function ScanVINPage() {
               ) : (
                 <Hash className="w-5 h-5" />
               )}
-              {loanerLoading ? t('Looking up…', 'Buscando…') : t('Look Up Loaner', 'Buscar Loaner')}
+              {loanerLoading ? t('Looking up…', 'Buscando…') : t('Look Up Loaner', 'Buscar vehículo')}
             </button>
           </form>
         </div>
