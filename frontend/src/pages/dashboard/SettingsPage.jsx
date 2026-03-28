@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Settings, RefreshCw, HardDrive, CheckCircle,
   UserPlus, Users, X, Eye, EyeOff, ExternalLink, Unlink, Zap,
-  WifiOff, CloudOff, Activity, Database, BookOpen, ChevronRight,
+  WifiOff, CloudOff, Activity, Database, BookOpen, ChevronRight, Trash2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../utils/api'
@@ -332,9 +332,181 @@ function AddUserModal({ onClose, onCreated }) {
   )
 }
 
+// ── Cleanup Tools section (manager / admin only) ─────────────────────────────
+function CleanupToolsSection() {
+  const [previewData,    setPreviewData]    = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError,   setPreviewError]   = useState(null)
+  const [showConfirm,    setShowConfirm]    = useState(false)
+  const [executing,      setExecuting]      = useState(false)
+  const [executeResult,  setExecuteResult]  = useState(null)
+  const [executeError,   setExecuteError]   = useState(null)
+
+  async function handlePreview() {
+    setPreviewLoading(true)
+    setPreviewError(null)
+    setPreviewData(null)
+    setExecuteResult(null)
+    setShowConfirm(false)
+    try {
+      const { data } = await api.post('/api/manager/cleanup-junk-preview')
+      setPreviewData(data)
+    } catch (err) {
+      setPreviewError(err.response?.data?.detail || 'Preview failed')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  async function handleExecute() {
+    setExecuting(true)
+    setExecuteError(null)
+    try {
+      const { data } = await api.post('/api/manager/cleanup-junk-execute')
+      setExecuteResult(data)
+      setPreviewData(null)
+      setShowConfirm(false)
+    } catch (err) {
+      setExecuteError(err.response?.data?.detail || 'Cleanup failed')
+    } finally {
+      setExecuting(false)
+    }
+  }
+
+  return (
+    <div className="card flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 bg-red-500/10">
+          <Trash2 className="w-5 h-5 text-red-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm text-brand-white">Cleanup Tools</p>
+          <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">
+            Removes junk in-progress inspections with no uploaded media, and deletes
+            test damage records. Does not touch Drive files or completed inspections with media.
+          </p>
+        </div>
+      </div>
+
+      {/* Preview result */}
+      {previewData && !executeResult && (
+        <div className="bg-brand-accent rounded-xl px-4 py-3 flex flex-col gap-2">
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-wide mb-0.5">
+            Preview — no changes made
+          </p>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Junk inspections to delete</span>
+            <span className={`font-bold ${previewData.junk_inspections_to_delete > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+              {previewData.junk_inspections_to_delete}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Completed / no media (skipped)</span>
+            <span className="font-bold text-gray-400">{previewData.completed_no_media_skipped}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Damage records to delete</span>
+            <span className={`font-bold ${previewData.damage_records_to_delete > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+              {previewData.damage_records_to_delete}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Execute result */}
+      {executeResult && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 flex flex-col gap-2">
+          <p className="text-green-400 text-xs font-bold uppercase tracking-wide mb-0.5">
+            Cleanup complete
+          </p>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Junk inspections deleted</span>
+            <span className="font-bold text-brand-white">{executeResult.deleted_junk_inspections}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Damage records deleted</span>
+            <span className="font-bold text-brand-white">{executeResult.deleted_damage_records}</span>
+          </div>
+          <p className="text-gray-600 text-xs mt-0.5">{executeResult.note}</p>
+        </div>
+      )}
+
+      {/* Errors */}
+      {previewError && <p className="text-red-400 text-xs">{previewError}</p>}
+      {executeError && <p className="text-red-400 text-xs">{executeError}</p>}
+
+      {/* Confirmation step */}
+      {showConfirm && !executeResult && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex flex-col gap-3">
+          <p className="text-red-300 text-sm font-semibold">
+            This will permanently delete junk inspections and all damage records. Proceed?
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExecute}
+              disabled={executing}
+              className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm
+                         flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              {executing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              {executing ? 'Deleting…' : 'Yes, Delete'}
+            </button>
+            <button
+              onClick={() => { setShowConfirm(false); setExecuteError(null) }}
+              disabled={executing}
+              className="flex-1 py-2.5 bg-brand-mid border border-brand-accent text-gray-300 rounded-xl
+                         font-bold text-sm active:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Primary action buttons */}
+      {!showConfirm && !executeResult && (
+        <div className="flex gap-2">
+          <button
+            onClick={handlePreview}
+            disabled={previewLoading || executing}
+            className="flex-1 py-2.5 bg-brand-mid border border-brand-accent text-gray-300 rounded-xl
+                       font-bold text-sm flex items-center justify-center gap-2
+                       active:scale-[0.98] transition-transform disabled:opacity-50"
+          >
+            {previewLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+            {previewLoading ? 'Loading…' : 'Preview'}
+          </button>
+          <button
+            onClick={() => { setShowConfirm(true); setExecuteError(null) }}
+            disabled={previewLoading || executing}
+            className="flex-1 py-2.5 bg-red-600/80 text-white rounded-xl font-bold text-sm
+                       flex items-center justify-center gap-2
+                       active:scale-[0.98] transition-transform disabled:opacity-50"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Run Cleanup
+          </button>
+        </div>
+      )}
+
+      {/* Allow re-running after success */}
+      {executeResult && (
+        <button
+          onClick={() => { setExecuteResult(null); setPreviewData(null) }}
+          className="text-xs text-gray-600 hover:text-gray-400 transition-colors text-center"
+        >
+          Run again
+        </button>
+      )}
+    </div>
+  )
+}
+
+
 // ââ Main page âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function SettingsPage() {
-  const { user: me } = useAuth()
+  const { user: me, isManager } = useAuth()
   const navigate = useNavigate()
   const [users,        setUsers]        = useState([])
   const [usersTotal,   setUsersTotal]   = useState(0)
@@ -446,6 +618,14 @@ export default function SettingsPage() {
             {showInactive ? 'Hide inactive users' : 'Show inactive users'}
           </button>
         </div>
+
+        {/* Cleanup Tools — manager / admin only */}
+        {isManager && (
+          <div>
+            <SectionTitle>Cleanup Tools</SectionTitle>
+            <CleanupToolsSection />
+          </div>
+        )}
 
         {/* App Info */}
         <p className="text-center text-gray-600 text-xs pb-2">
