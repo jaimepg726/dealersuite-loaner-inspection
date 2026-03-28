@@ -5,7 +5,7 @@ Business logic for creating, listing, and completing inspections.
 
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_, exists as sa_exists
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
@@ -116,7 +116,31 @@ async def list_inspections(
     skip: int = 0,
     limit: int = 50,
 ) -> tuple[int, list[Inspection]]:
+    from datetime import timedelta
+    from models.inspection_media import InspectionMedia
+
     query = select(Inspection)
+
+    # Always suppress stale abandoned rows: "In Progress" older than 2 h with no
+    # finalized media.  These are page-mount artifacts created before the porter
+    # started recording (or sessions they abandoned immediately).  A row is kept
+    # when it is: (a) not In Progress, OR (b) recent (started < 2 h ago — might
+    # be actively recording), OR (c) has at least one finalized media record.
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+    _has_real_media = sa_exists(
+        select(InspectionMedia.id).where(
+            InspectionMedia.inspection_id == Inspection.id,
+            InspectionMedia.file_url.not_in(['pending', '']),
+            InspectionMedia.file_url.is_not(None),
+        )
+    )
+    query = query.where(
+        or_(
+            Inspection.status != InspectionStatus.in_progress,
+            Inspection.started_at >= stale_cutoff,
+            _has_real_media,
+        )
+    )
 
     filters = []
     if status:
@@ -128,7 +152,6 @@ async def list_inspections(
     if vehicle_id:
         filters.append(Inspection.vehicle_id == vehicle_id)
     if days:
-        from datetime import timedelta
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         filters.append(Inspection.started_at >= cutoff)
 

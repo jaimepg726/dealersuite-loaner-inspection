@@ -79,6 +79,7 @@ export default function useInspection() {
         vehicle_id: vehicleId,
         inspection_type: type,
       })
+      inspectionRef.current = data   // set synchronously so uploadFile can read it immediately
       setInspection(data)
       if (!data.drive_folder_id) startPollingForFolder(data.id)
       return data
@@ -100,6 +101,7 @@ export default function useInspection() {
         inspection_type: 'condition',
         vin_override: normalizedVin,
       })
+      inspectionRef.current = data   // set synchronously so uploadFile can read it immediately
       setInspection(data)
       if (!data.drive_folder_id) startPollingForFolder(data.id)
       return data
@@ -259,5 +261,5 @@ export default function useInspection() {
     inspectionRef.current = null
   }, [])
 
-  return { inspection, starting, uploading, uploadPct, error, start, startCondition, resume, uploadFile, complete, reset }
+  return { inspection, inspectionRef, starting, uploading, uploadPct, error, start, startCondition, resume, uploadFile, complete, reset }
 }

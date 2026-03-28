@@ -68,7 +68,7 @@ export default function InspectPage() {
   const location  = useLocation()
   const navigate  = useNavigate()
 
-  const { inspection, starting, uploading, error, start, startCondition, resume, uploadFile, complete, reset } = useInspection()
+  const { inspection, inspectionRef, starting, uploading, error, start, startCondition, uploadFile, complete, reset } = useInspection()
 
   const vehicle      = location.state?.vehicle ?? null
   const conditionVin = location.state?.conditionVin ?? null
@@ -89,47 +89,44 @@ export default function InspectPage() {
   const uploadsStartedRef   = useRef(false)
   const videoCaptureLockRef = useRef(false)
 
-  // ── Start inspection on mount ──────────────────────────────────────────────────────
+  // ── Validate params on mount, go straight to recording ────────────────────────────
+  // The DB inspection row is NOT created here — it is created only after the porter
+  // completes an actual recording (handleVideoComplete).  This prevents junk rows
+  // from accumulating whenever a porter enters or exits the page without recording.
   useEffect(() => {
     const isCondition = type === 'condition' && vehicleId === '0'
-
     if (isCondition && !conditionVin) { setPhase('error'); return }
-    if (!isCondition && !vehicleId) return
-
-    const sessionKey = isCondition
-      ? `inspection_condition_${conditionVin}`
-      : `inspection_${vehicleId}_${apiType}`
-
-    const existingId = sessionStorage.getItem(sessionKey)
-    if (existingId) {
-      console.info(`Resuming existing inspection ${existingId}`)
-      resume(Number(existingId))
-        .then(() => setPhase('recording'))
-        .catch(() => {
-          console.warn(`Could not resume inspection ${existingId} — starting fresh`)
-          sessionStorage.removeItem(sessionKey)
-          startFresh()
-        })
-    } else {
-      startFresh()
-    }
-    function startFresh() {
-      const p = isCondition
-        ? startCondition(conditionVin)
-        : start(Number(vehicleId), apiType)
-      p.then(data => { sessionStorage.setItem(sessionKey, String(data.id)); setPhase('recording') })
-        .catch(() => setPhase('error'))
-    }
-    return () => { reset(); sessionStorage.removeItem(sessionKey) }
+    if (!isCondition && !vehicleId) { setPhase('error'); return }
+    setPhase('recording')
+    return () => { reset() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Transitions ──────────────────────────────────────────────────────────────────
-  function handleVideoComplete(videoBlob, capturedPhotos) {
+  // handleVideoComplete is the FIRST point of real work — the DB row is created here.
+  async function handleVideoComplete(videoBlob, capturedPhotos) {
     if (videoCaptureLockRef.current) { console.warn('Duplicate capture prevented'); return }
     videoCaptureLockRef.current = true
     console.info('Video captured:', type + '_' + new Date().toISOString())
+
     videoBlobRef.current  = videoBlob
     photoBlobsRef.current = capturedPhotos
+
+    // Create the inspection row now that the porter has done real work.
+    // inspectionRef.current is set synchronously inside start/startCondition so
+    // uploadFile can read it immediately without waiting for a React re-render.
+    const isCondition = type === 'condition' && vehicleId === '0'
+    try {
+      if (isCondition) {
+        await startCondition(conditionVin)
+      } else {
+        await start(Number(vehicleId), apiType)
+      }
+    } catch {
+      videoCaptureLockRef.current = false
+      setPhase('error')
+      return
+    }
+
     // Condition videos skip damage logging — go straight to upload
     if (type === 'condition') {
       kickOffUploads([])
@@ -237,18 +234,16 @@ export default function InspectPage() {
 
       // Step 3 — save damage records
       mark('active')
-      // `inspection` is safe to read here without a ref: kickOffUploads is a
-      // plain function (not stored in a ref), so it is re-created on every
-      // render and always closes over the *current* inspection value from
-      // useInspection state. By the time the user reaches the damage phase,
-      // start() has already resolved and set inspection, so this will never
-      // be null under normal flow.
-      if (!inspection) throw new Error('Inspection not found')
+      // Use inspectionRef.current (not the inspection state variable) so this
+      // always reads the live value even when called shortly after start() resolves
+      // (before the scheduled React re-render has updated the closed-over state).
+      const activeInspection = inspectionRef.current
+      if (!activeInspection) throw new Error('Inspection not found')
       const textOnlyDamages = damages
         .filter(d => !d.photoBlob)
         .map(d => ({ location: d.location, description: d.description, photo_url: null, photo_drive_id: null }))
       for (const d of [...textOnlyDamages, ...photoResults]) {
-        await api.post(`/api/inspect/${inspection.id}/damage`, {
+        await api.post(`/api/inspect/${activeInspection.id}/damage`, {
           location: d.location || null, description: d.description || null,
           photo_url: d.photo_url || null, photo_drive_id: d.photo_drive_id || null,
         })

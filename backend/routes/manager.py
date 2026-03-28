@@ -377,3 +377,97 @@ async def get_frame_match(
         "paired_media": await _media(paired.id) if paired else [],
         "has_pair": paired is not None,
     }
+
+
+# ---------------------------------------------------------------------------
+# One-time junk data cleanup (manager-auth-protected)
+# ---------------------------------------------------------------------------
+
+@router.post("/cleanup-junk-preview", summary="Preview junk data cleanup counts (no deletes)")
+async def cleanup_junk_preview(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """
+    Dry-run preview: returns counts of what cleanup-junk-execute would delete.
+    Safe to call any number of times — no data is modified.
+    """
+    from sqlalchemy import text as _text
+    junk_count = (await db.execute(_text("""
+        SELECT COUNT(*) FROM inspections i
+        WHERE i.status = 'In Progress'
+          AND NOT EXISTS (
+              SELECT 1 FROM inspection_media m
+              WHERE m.inspection_id = i.id
+                AND m.file_url IS NOT NULL
+                AND m.file_url NOT IN ('pending', '')
+          )
+    """))).scalar_one()
+
+    completed_no_media = (await db.execute(_text("""
+        SELECT COUNT(*) FROM inspections i
+        WHERE i.status = 'Completed'
+          AND NOT EXISTS (
+              SELECT 1 FROM inspection_media m
+              WHERE m.inspection_id = i.id
+                AND m.file_url IS NOT NULL
+                AND m.file_url NOT IN ('pending', '')
+          )
+    """))).scalar_one()
+
+    damage_count = (await db.execute(_text("SELECT COUNT(*) FROM damages"))).scalar_one()
+
+    return {
+        "dry_run": True,
+        "junk_inspections_to_delete": junk_count,
+        "completed_no_media_skipped": completed_no_media,
+        "damage_records_to_delete": damage_count,
+        "message": "Call POST /api/manager/cleanup-junk-execute to apply these deletes.",
+    }
+
+
+@router.post("/cleanup-junk-execute", summary="Execute one-time junk data cleanup (irreversible)")
+async def cleanup_junk_execute(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """
+    ONE-TIME OPERATION — deletes:
+      • All 'In Progress' inspections with zero finalized media (abandoned/junk rows)
+      • All damage records (confirmed test data)
+    Cascades automatically remove orphaned InspectionMedia stubs.
+    Does NOT touch Completed inspections or any Drive files.
+    """
+    from sqlalchemy import text as _text
+
+    # Collect IDs of junk inspections for reporting
+    junk_rows = (await db.execute(_text("""
+        SELECT i.id FROM inspections i
+        WHERE i.status = 'In Progress'
+          AND NOT EXISTS (
+              SELECT 1 FROM inspection_media m
+              WHERE m.inspection_id = i.id
+                AND m.file_url IS NOT NULL
+                AND m.file_url NOT IN ('pending', '')
+          )
+    """))).fetchall()
+    junk_ids = [r[0] for r in junk_rows]
+
+    deleted_inspections = 0
+    if junk_ids:
+        result = await db.execute(
+            _text("DELETE FROM inspections WHERE id = ANY(:ids)").bindparams(ids=junk_ids)
+        )
+        deleted_inspections = result.rowcount
+
+    result = await db.execute(_text("DELETE FROM damages"))
+    deleted_damages = result.rowcount
+
+    await db.commit()
+
+    return {
+        "executed": True,
+        "deleted_junk_inspections": deleted_inspections,
+        "deleted_damage_records": deleted_damages,
+        "note": "Cascades removed orphaned media stubs. No Drive files were touched.",
+    }
