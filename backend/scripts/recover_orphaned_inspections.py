@@ -39,7 +39,8 @@ import requests
 
 DRY_RUN_DEFAULT = True  # safe default; override with --execute
 
-DATABASE_URL         = os.environ.get("DATABASE_URL", "")
+# Prefer public URL when running locally (internal host not reachable outside Railway network)
+DATABASE_URL         = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("DATABASE_URL", "")
 JWT_SECRET           = os.environ.get("JWT_SECRET", "")
 GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
