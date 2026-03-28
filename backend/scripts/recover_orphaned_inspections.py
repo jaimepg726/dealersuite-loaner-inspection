@@ -39,8 +39,10 @@ import requests
 
 DRY_RUN_DEFAULT = True  # safe default; override with --execute
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-JWT_SECRET   = os.environ.get("JWT_SECRET", "")
+DATABASE_URL         = os.environ.get("DATABASE_URL", "")
+JWT_SECRET           = os.environ.get("JWT_SECRET", "")
+GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
 DRIVE_API        = "https://www.googleapis.com/drive/v3"
 DRIVE_FILE_BASE  = "https://drive.google.com/uc?id={}&export=view"
@@ -69,7 +71,7 @@ def _decrypt(value: str) -> str:
         return value  # not encrypted (legacy plain text)
 
 
-def read_setting(cur, key: str) -> str | None:
+def read_setting(cur, key: str) -> None:
     cur.execute("SELECT value FROM app_settings WHERE key = %s", (key,))
     row = cur.fetchone()
     if not row or not row["value"]:
@@ -79,7 +81,8 @@ def read_setting(cur, key: str) -> str | None:
 # ── Drive helpers ─────────────────────────────────────────────────────────────
 
 def get_access_token(cur) -> str:
-    """Return a valid Drive access token, refreshing if near expiry."""
+    """Return a valid Drive access token, refreshing if expired or near expiry.
+    Mirrors GoogleDriveBackend._get_access_token() in storage/drive_backend.py."""
     access_token  = read_setting(cur, "google_access_token")
     refresh_token = read_setting(cur, "google_refresh_token")
     expiry_str    = read_setting(cur, "google_token_expiry")
@@ -88,24 +91,32 @@ def get_access_token(cur) -> str:
         print("ERROR: No Drive token — reconnect Drive in manager settings.", file=sys.stderr)
         sys.exit(1)
 
-    near_expiry = False
+    expiry = None
     if expiry_str:
         try:
             expiry = datetime.fromisoformat(expiry_str)
             if expiry.tzinfo is None:
                 expiry = expiry.replace(tzinfo=timezone.utc)
-            near_expiry = (expiry - datetime.now(timezone.utc)) < timedelta(minutes=5)
         except ValueError:
             pass
 
-    if near_expiry and refresh_token:
-        from config import get_settings
-        cfg = get_settings()
+    now           = datetime.now(timezone.utc)
+    token_expired = expiry is not None and expiry <= now
+    near_expiry   = expiry is not None and (expiry - now) < timedelta(minutes=5)
+
+    if token_expired and not refresh_token:
+        print("ERROR: Drive token is expired and no refresh_token is stored.", file=sys.stderr)
+        sys.exit(1)
+
+    if refresh_token and (token_expired or near_expiry):
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            print("ERROR: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars not set.", file=sys.stderr)
+            sys.exit(1)
         resp = requests.post(
             "https://oauth2.googleapis.com/token",
             data={
-                "client_id":     cfg.google_client_id,
-                "client_secret": cfg.google_client_secret,
+                "client_id":     GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
                 "refresh_token": refresh_token,
                 "grant_type":    "refresh_token",
             },
@@ -113,9 +124,10 @@ def get_access_token(cur) -> str:
         )
         if resp.ok:
             access_token = resp.json()["access_token"]
-            print("Drive: token refreshed.")
+            print("Drive: access token refreshed.")
         else:
-            print(f"WARN: token refresh failed ({resp.status_code}) — continuing with old token.")
+            print(f"ERROR: token refresh failed ({resp.status_code}) — cannot proceed.", file=sys.stderr)
+            sys.exit(1)
 
     return access_token
 
@@ -161,7 +173,7 @@ def find_best_match(
     loaner:      str,
     insp_type:   str,
     started_at:  datetime,
-) -> dict | None:
+):
     """
     Try prefix match for exact date, then ±1 day, then ±2 days.
     Among matches pick the LARGEST file (most complete upload).
@@ -209,9 +221,9 @@ def run(execute: bool) -> None:
         # ── Drive auth + folder IDs ───────────────────────────────────────────
         token = get_access_token(cur)
 
-        insp_folder_id = read_setting(cur, "drive_insp_folder_id")
+        insp_folder_id = read_setting(cur, "drive_inspections_folder_id")
         if not insp_folder_id:
-            print("ERROR: drive_insp_folder_id not found — ensure Drive is connected.", file=sys.stderr)
+            print("ERROR: drive_inspections_folder_id not found — ensure Drive is connected.", file=sys.stderr)
             return
 
         print(f"Listing videos in Drive inspections folder ({insp_folder_id})…")
