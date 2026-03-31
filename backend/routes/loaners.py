@@ -24,7 +24,7 @@ async def list_loaners(status: str | None = None, limit: int = 100, db: AsyncSes
 @router.post("/", response_model=LoanerOut, status_code=201)
 async def checkout(body: LoanerCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     v = await db.get(Vehicle, body.vehicle_id)
-    if not v: raise HTTPException(404, "Vehicle not found")
+    if not v or not v.is_active: raise HTTPException(404, "Vehicle not found or retired")
     l = Loaner(**body.model_dump(), status="Out", created_by=user.id)
     db.add(l)
     await db.commit()

@@ -37,11 +37,16 @@ async def start_inspection(
 
     vehicle_id: int | None = None
     if data.vehicle_id is not None:
-        # Standard flow — confirm vehicle exists
-        result = await db.execute(select(Vehicle).where(Vehicle.id == data.vehicle_id))
+        # Standard flow — confirm vehicle exists and is active (not retired)
+        result = await db.execute(
+            select(Vehicle).where(Vehicle.id == data.vehicle_id, Vehicle.is_active == True)  # noqa: E712
+        )
         vehicle = result.scalar_one_or_none()
         if not vehicle:
-            raise HTTPException(status_code=404, detail="Vehicle not found")
+            raise HTTPException(
+                status_code=404,
+                detail="Vehicle not found or has been retired from the fleet",
+            )
         vehicle_id = data.vehicle_id
     elif norm_type != "Condition":
         # Only Condition inspections may omit vehicle_id

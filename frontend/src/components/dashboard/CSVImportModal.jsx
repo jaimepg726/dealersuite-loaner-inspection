@@ -120,12 +120,20 @@ export default function CSVImportModal({ onClose, onImportComplete }) {
     form.append('file', file)
 
     try {
-      const { data } = await api.post('/api/fleet/import', form)
+      // Omit Content-Type so the browser sets multipart/form-data with the correct boundary.
+      // api.js defaults to application/json which breaks multipart file uploads.
+      const { data } = await api.post('/api/fleet/import', form, {
+        headers: { 'Content-Type': undefined },
+      })
       setResult(data)
       setPhase('done')
       onImportComplete?.()   // refresh parent fleet list
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Import failed. Please try again.'
+      // FastAPI 422 errors return detail as an array of objects — always coerce to string.
+      const raw = err.response?.data?.detail
+      const msg = Array.isArray(raw)
+        ? raw.map(e => e.msg || JSON.stringify(e)).join('; ')
+        : (typeof raw === 'string' ? raw : 'Import failed. Please try again.')
       setErrMsg(msg)
       setPhase('error')
     }
