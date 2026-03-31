@@ -50,7 +50,9 @@ async def get_vehicle_by_id(db: AsyncSession, vehicle_id: int) -> Vehicle:
 
 async def get_vehicle_by_vin(db: AsyncSession, vin: str) -> Vehicle:
     vin = validate_vin(vin)
-    result = await db.execute(select(Vehicle).where(Vehicle.vin == vin))
+    result = await db.execute(
+        select(Vehicle).where(Vehicle.vin == vin, Vehicle.is_active == True)  # noqa: E712
+    )
     vehicle = result.scalar_one_or_none()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")

@@ -9,7 +9,7 @@ import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, X, RefreshCw } f
 import api from '../../utils/api'
 
 function ImportSummary({ summary, filename }) {
-  const { created, updated, skipped, errors, total } = summary
+  const { created, updated, skipped, errors, total, decommissioned = 0 } = summary
 
   return (
     <div className="flex flex-col gap-4">
@@ -31,9 +31,18 @@ function ImportSummary({ summary, filename }) {
           <p className="text-3xl font-extrabold text-brand-blue">{updated}</p>
           <p className="text-blue-400 text-sm font-semibold mt-1">Updated</p>
         </div>
-        <div className="bg-brand-accent/50 border border-brand-accent rounded-xl p-4 text-center">
-          <p className="text-3xl font-extrabold text-gray-400">{skipped}</p>
-          <p className="text-gray-500 text-sm font-semibold mt-1">Skipped (Retired)</p>
+        <div className={`border rounded-xl p-4 text-center
+          ${decommissioned > 0
+            ? 'bg-orange-900/30 border-orange-800'
+            : 'bg-brand-accent/50 border-brand-accent'
+          }`}
+        >
+          <p className={`text-3xl font-extrabold ${decommissioned > 0 ? 'text-orange-400' : 'text-gray-400'}`}>
+            {decommissioned}
+          </p>
+          <p className={`text-sm font-semibold mt-1 ${decommissioned > 0 ? 'text-orange-500' : 'text-gray-500'}`}>
+            Removed
+          </p>
         </div>
         <div className={`border rounded-xl p-4 text-center
           ${errors.length > 0
@@ -50,7 +59,7 @@ function ImportSummary({ summary, filename }) {
         </div>
       </div>
 
-      <p className="text-gray-500 text-xs text-center">{total} rows processed in total</p>
+      <p className="text-gray-500 text-xs text-center">{total} rows processed · {skipped} retired/skipped</p>
 
       {/* Error details */}
       {errors.length > 0 && (

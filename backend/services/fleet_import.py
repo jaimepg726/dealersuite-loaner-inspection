@@ -63,16 +63,20 @@ async def import_fleet_csv(
 
     col_map = _map_columns(list(reader.fieldnames))
 
-    # ── Step 2: collect loaner numbers present in file ───────────────────────
+    # ── Step 2: collect loaner numbers of ACTIVE (non-Retired) vehicles ───────
+    # Retired rows are intentionally excluded so the decommission step below
+    # treats them the same as vehicles missing from the file (→ is_active=False).
+    # Including them would protect them from decommission even though they're retired.
     rows = list(reader)
     current_fleet_numbers: set[str] = set()
     for row in rows:
         raw = _get(row, col_map, "loaner_number")
-        if raw:
+        raw_status = (_get(row, col_map, "status") or "").lower().strip()
+        if raw and raw_status != "retired":
             current_fleet_numbers.add(raw.strip())
 
     logger.info(
-        "Fleet import: found %d loaner numbers in file: %s",
+        "Fleet import: found %d active loaner numbers in file: %s",
         len(current_fleet_numbers),
         sorted(current_fleet_numbers),
     )

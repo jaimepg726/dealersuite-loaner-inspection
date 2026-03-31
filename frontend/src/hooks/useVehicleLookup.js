@@ -27,8 +27,10 @@ export default function useVehicleLookup() {
       if (err.response?.status === 404) {
         setNotFound(true)
       } else {
-        const msg =
-          err.response?.data?.detail || 'Could not look up vehicle. Check your connection.'
+        const raw = err.response?.data?.detail
+        const msg = Array.isArray(raw)
+          ? raw.map(e => e.msg || String(e)).join('; ')
+          : raw || 'Could not look up vehicle. Check your connection.'
         setError(msg)
       }
       return null
@@ -41,15 +43,24 @@ export default function useVehicleLookup() {
     setLoading(true)
     setError(null)
     setVehicle(null)
+    setNotFound(false) // reset so the VIN-not-found banner doesn't bleed into loaner lookups
 
     try {
       const { data } = await api.get(`/api/vehicles/loaner/${encodeURIComponent(loanerNumber)}`)
       setVehicle(data)
       return data
     } catch (err) {
-      const msg =
-        err.response?.data?.detail || 'Could not look up loaner. Check your connection.'
-      setError(msg)
+      if (err.response?.status === 404) {
+        setNotFound(true)
+      } else {
+        // Guard: FastAPI 422 detail is a list of objects — stringify to prevent
+        // "Objects are not valid as a React child" crash when rendering the message.
+        const raw = err.response?.data?.detail
+        const msg = Array.isArray(raw)
+          ? raw.map(e => e.msg || String(e)).join('; ')
+          : raw || 'Could not look up loaner. Check your connection.'
+        setError(msg)
+      }
       return null
     } finally {
       setLoading(false)
