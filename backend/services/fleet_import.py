@@ -82,13 +82,17 @@ async def import_fleet_csv(
     )
 
     # ── Step 3: decommission vehicles missing from file ──────────────────────
+    # Filter by loaner_number.isnot(None) rather than vehicle_type == "Loaner"
+    # so that vehicles previously imported with a wrong vehicle_type value
+    # (e.g. "Countryman" from the TSD Body Style column before the alias fix)
+    # are still correctly retired when they disappear from the CSV.
     decommissioned = 0
     if current_fleet_numbers:
         stmt = (
             update(Vehicle)
             .where(
+                Vehicle.loaner_number.isnot(None),
                 Vehicle.loaner_number.notin_(current_fleet_numbers),
-                Vehicle.vehicle_type == "Loaner",
                 Vehicle.is_active == True,  # noqa: E712
             )
             .values(is_active=False, status="Retired")

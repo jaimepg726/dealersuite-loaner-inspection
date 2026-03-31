@@ -45,12 +45,16 @@ def _collect_active_loaner_numbers(rows: list[dict]) -> set[str]:
 def _should_decommission(vehicle: FakeVehicle, current_fleet: set[str]) -> bool:
     """
     Reproduce the decommission WHERE clause:
-    Vehicle.loaner_number.notin_(current_fleet)
-    AND Vehicle.vehicle_type == 'Loaner'
+    Vehicle.loaner_number.isnot(None)
+    AND Vehicle.loaner_number.notin_(current_fleet)
     AND Vehicle.is_active == True
+
+    Filters on loaner_number rather than vehicle_type so that vehicles
+    previously stored with a wrong vehicle_type (e.g. 'Countryman' from the
+    TSD Body Style column before the alias fix) are still correctly retired.
     """
     return (
-        vehicle.vehicle_type == "Loaner"
+        vehicle.loaner_number is not None
         and vehicle.is_active is True
         and vehicle.loaner_number not in current_fleet
     )
@@ -261,14 +265,44 @@ def test_fleet_list_active_filter_excludes_retired():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. Non-Loaner vehicles are not decommissioned by CSV import
+# 8. Vehicles without a loaner number are not decommissioned by CSV import
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_non_loaner_vehicles_not_decommissioned():
-    """Only Loaner-type vehicles are subject to decommission on CSV import."""
-    inventory = FakeVehicle("I001", "9HGBH41JXMN109203", vehicle_type="Inventory")
-    current_fleet: set[str] = {"L001"}  # I001 not present, but it's Inventory type
+    """Vehicles with no loaner_number (inventory, sales) are never decommissioned."""
+    # Real inventory/sales vehicles have no loaner number — that's the protection
+    inventory = FakeVehicle(None, "9HGBH41JXMN109203", vehicle_type="Inventory")
+    current_fleet: set[str] = {"L001"}
 
     decommissioned = _apply_decommission([inventory], current_fleet)
     assert decommissioned == 0
     assert inventory.is_active is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Vehicles stored with wrong vehicle_type (e.g. body style) are still retired
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_wrong_vehicle_type_still_decommissioned():
+    """
+    Vehicles previously imported with vehicle_type='Countryman' (body style alias bug)
+    must still be decommissioned when they disappear from the CSV.
+    The filter uses loaner_number, not vehicle_type, so this is now safe.
+    """
+    v = FakeVehicle("M502", "WMZ23GA06T7T90489", vehicle_type="Countryman")
+    current_fleet: set[str] = {"M503"}  # M502 not present
+
+    decommissioned = _apply_decommission([v], current_fleet)
+    assert decommissioned == 1
+    assert v.is_active is False
+    assert v.status == "Retired"
+
+
+def test_correct_vehicle_type_not_decommissioned_when_present():
+    """A loaner that IS in the new CSV is never decommissioned regardless of vehicle_type."""
+    v = FakeVehicle("M502", "WMZ23GA06T7T90489", vehicle_type="Countryman")
+    current_fleet: set[str] = {"M502", "M503"}  # M502 is present
+
+    decommissioned = _apply_decommission([v], current_fleet)
+    assert decommissioned == 0
+    assert v.is_active is True

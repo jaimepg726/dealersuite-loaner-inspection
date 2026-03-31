@@ -39,7 +39,7 @@ COLUMN_ALIASES = {
     "plate":         ["plate", "license_plate", "plate_number", "license", "license plate", "license_plate"],
     "mileage":       ["mileage", "miles", "odometer", "current_mileage", "current_miles", "current miles"],
     "status":        ["status", "vehicle_status", "current_status", "current status"],
-    "vehicle_type":  ["vehicle_type", "type", "category", "body_style", "body style"],
+    "vehicle_type":  ["vehicle_type", "type", "category"],
     "fuel":          ["fuel", "fuel_level", "current_fuel", "current fuel"],
 }
 
