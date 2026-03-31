@@ -61,12 +61,17 @@ export default function SelectUserPage() {
   }
 
   function saveAndContinue(user) {
+    // Write to sessionStorage BEFORE navigate so any mounted effect that reads
+    // currentUser sees the value immediately (sessionStorage.setItem is sync).
     sessionStorage.setItem('currentUser', JSON.stringify({
       name: user.name,
       role: user.role,
       lang: user.lang || 'en',
     }))
-    navigate('/scan')
+    // replace: true removes SelectUserPage from the browser history stack.
+    // Without this, pressing the back button from /scan returns to /select-user,
+    // which re-renders SelectUserPage and can trigger another redirect cycle.
+    navigate('/scan', { replace: true })
   }
 
   return (

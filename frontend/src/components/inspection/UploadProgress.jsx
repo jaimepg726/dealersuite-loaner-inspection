@@ -43,8 +43,26 @@ export default function UploadProgress({ steps = [], currentPct = 0, errorMsg = 
     ? Math.round(((doneCount / totalCount) * 100 + (currentPct / totalCount)) * 10) / 10
     : 0
 
+  const isUploading = !errorMsg && doneCount < totalCount
+
   return (
     <div className="card flex flex-col gap-5">
+      {/* "Do not close" warning — shown while upload is active */}
+      {isUploading && (
+        <div className="flex items-center gap-3 bg-yellow-900/40 border border-yellow-600
+                        rounded-xl px-4 py-3">
+          <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0" />
+          <div>
+            <p className="text-yellow-300 font-extrabold text-sm leading-tight">
+              {t('Upload in progress — do not close the app', 'Subiendo — no cierre la aplicación')}
+            </p>
+            <p className="text-yellow-500 text-xs mt-0.5">
+              {t('Closing now may lose your inspection', 'Cerrar ahora puede perder su inspección')}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 bg-brand-blue/20 rounded-2xl flex items-center justify-center shrink-0">
@@ -60,8 +78,8 @@ export default function UploadProgress({ steps = [], currentPct = 0, errorMsg = 
         </div>
       </div>
 
-      {/* Overall progress bar */}
-      <div className="w-full h-2 bg-brand-accent rounded-full overflow-hidden">
+      {/* Overall progress bar — thicker and more prominent during active upload */}
+      <div className={`w-full rounded-full overflow-hidden transition-all ${isUploading ? 'h-4 bg-brand-accent' : 'h-2 bg-brand-accent'}`}>
         <div
           className={`h-full rounded-full transition-all duration-300 ${
             errorMsg ? 'bg-red-500' : 'bg-brand-blue'

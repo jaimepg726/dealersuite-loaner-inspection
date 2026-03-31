@@ -75,9 +75,12 @@ export default function useInspection() {
   const start = useCallback(async (vehicleId, type) => {
     setStarting(true); setError(null)
     try {
+      let porterName = null
+      try { porterName = JSON.parse(sessionStorage.getItem('currentUser') || 'null')?.name } catch {}
       const { data } = await api.post('/api/inspect/start', {
-        vehicle_id: vehicleId,
+        vehicle_id:     vehicleId,
         inspection_type: type,
+        inspector_name: porterName || undefined,
       })
       inspectionRef.current = data   // set synchronously so uploadFile can read it immediately
       setInspection(data)
@@ -96,10 +99,13 @@ export default function useInspection() {
     const normalizedVin = vinOverride?.trim().toUpperCase() || null
     setStarting(true); setError(null)
     try {
+      let porterName = null
+      try { porterName = JSON.parse(sessionStorage.getItem('currentUser') || 'null')?.name } catch {}
       const { data } = await api.post('/api/inspect/start', {
-        vehicle_id: null,
+        vehicle_id:      null,
         inspection_type: 'condition',
-        vin_override: normalizedVin,
+        vin_override:    normalizedVin,
+        inspector_name:  porterName || undefined,
       })
       inspectionRef.current = data   // set synchronously so uploadFile can read it immediately
       setInspection(data)

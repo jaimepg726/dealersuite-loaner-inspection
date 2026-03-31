@@ -14,6 +14,7 @@ class InspectionStart(BaseModel):
     vehicle_id:      Optional[int] = None  # None allowed for Condition type
     inspection_type: str  # "Checkout" | "Checkin" | "Inventory" | "Sales" | "Condition"
     vin_override:    Optional[str] = None  # Raw VIN or last-7 for Condition inspections
+    inspector_name:  Optional[str] = None  # Porter name from sessionStorage — overrides JWT user name
 
 
 class InspectionComplete(BaseModel):

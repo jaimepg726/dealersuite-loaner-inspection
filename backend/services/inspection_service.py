@@ -55,7 +55,7 @@ async def start_inspection(
     inspection = Inspection(
         vehicle_id      = vehicle_id,
         inspector_id    = current_user.id,
-        inspector_name  = current_user.name,
+        inspector_name  = data.inspector_name or current_user.name,
         inspection_type = norm_type,
         status          = InspectionStatus.in_progress,
         started_at      = datetime.now(timezone.utc),

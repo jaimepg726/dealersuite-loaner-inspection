@@ -101,6 +101,17 @@ export default function InspectPage() {
     return () => { reset() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Warn before closing tab/app during upload ─────────────────────────────
+  useEffect(() => {
+    if (phase !== 'uploading') return
+    const handleBeforeUnload = (e) => {
+      e.preventDefault()
+      e.returnValue = '' // required for Chrome; shows browser's own confirmation dialog
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [phase])
+
   // ── Transitions ──────────────────────────────────────────────────────────────────
   // handleVideoComplete is the FIRST point of real work — the DB row is created here.
   async function handleVideoComplete(videoBlob, capturedPhotos) {
@@ -181,6 +192,13 @@ export default function InspectPage() {
     const videoBlob  = videoBlobRef.current
     if (videoBlob) console.info('Video added to inspection:', type + '_video')
 
+    // Persist the in-progress inspection ID so PorterHome can detect an
+    // abandoned upload if the porter closes the app before this completes.
+    const pendingId = inspectionRef.current?.id
+    if (pendingId) {
+      try { sessionStorage.setItem('ds_upload_pending', String(pendingId)) } catch {}
+    }
+
     const photoDmg   = damages.filter(d => d.photoBlob)
     const photoCount = photoDmg.length
     const steps      = makeSteps(!!videoBlob, photoCount, type === 'condition')
@@ -254,6 +272,7 @@ export default function InspectPage() {
       mark('active')
       await complete(photoResults.length)
       mark('done')
+      try { sessionStorage.removeItem('ds_upload_pending') } catch {}
       setPhase('done')
 
     } catch (err) {

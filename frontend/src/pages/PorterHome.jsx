@@ -3,11 +3,13 @@
  * Two large action buttons - New Inspection, Manager Review.
  * Minimal training required for service drive porters.
  */
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera, LayoutDashboard, Power, KeyRound, BookOpen } from 'lucide-react'
+import { Camera, LayoutDashboard, Power, KeyRound, BookOpen, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/ui/PageHeader'
 import { t } from '../utils/lang'
+import api from '../utils/api'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -25,6 +27,36 @@ export default function PorterHome() {
     try { return JSON.parse(sessionStorage.getItem('currentUser') || 'null') }
     catch { return null }
   })()
+
+  // ── Abandoned upload detection ─────────────────────────────────────────────
+  // If the porter closed the app while uploading, ds_upload_pending holds the
+  // inspection ID. On app reopen (PorterHome mount), we surface a retry prompt.
+  const [pendingUploadId, setPendingUploadId] = useState(null)
+  const [retryState, setRetryState] = useState('idle') // 'idle' | 'retrying' | 'done' | 'error'
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem('ds_upload_pending')
+    if (stored) setPendingUploadId(stored)
+  }, [])
+
+  async function handleRetryUpload() {
+    if (!pendingUploadId || retryState === 'retrying') return
+    setRetryState('retrying')
+    try {
+      await api.post(`/api/inspect/${pendingUploadId}/complete`, { photo_count: 0, notes: null })
+      sessionStorage.removeItem('ds_upload_pending')
+      setPendingUploadId(null)
+      setRetryState('done')
+    } catch {
+      setRetryState('error')
+    }
+  }
+
+  function handleDismissRetry() {
+    sessionStorage.removeItem('ds_upload_pending')
+    setPendingUploadId(null)
+    setRetryState('idle')
+  }
 
   async function handleLogout() {
     await logout()
@@ -49,6 +81,50 @@ export default function PorterHome() {
         showBack={false}
         showUserChip={true}
       />
+
+      {/* Abandoned upload recovery banner */}
+      {pendingUploadId && retryState !== 'done' && (
+        <div className="mx-5 mb-2 rounded-2xl border border-yellow-600 bg-yellow-900/30 px-4 py-4 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-yellow-300 font-extrabold text-sm">
+                {t('Unfinished inspection', 'Inspección sin terminar')}
+              </p>
+              <p className="text-yellow-500 text-xs mt-0.5">
+                {t(
+                  'An inspection upload was interrupted. Would you like to finish saving it?',
+                  'Una subida fue interrumpida. ¿Desea terminar de guardarla?'
+                )}
+              </p>
+              {retryState === 'error' && (
+                <p className="text-red-400 text-xs mt-1">
+                  {t('Could not complete — try again or dismiss.', 'No se pudo completar — intente de nuevo o descarte.')}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRetryUpload}
+              disabled={retryState === 'retrying'}
+              className="flex-1 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50
+                         text-white font-bold text-sm rounded-xl py-2.5 active:scale-95 transition-all"
+            >
+              {retryState === 'retrying'
+                ? t('Saving…', 'Guardando…')
+                : t('Retry Upload', 'Reintentar')}
+            </button>
+            <button
+              onClick={handleDismissRetry}
+              className="flex-1 bg-brand-mid border border-brand-accent text-gray-400
+                         font-semibold text-sm rounded-xl py-2.5 active:scale-95 transition-all"
+            >
+              {t('Dismiss', 'Descartar')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main actions */}
       <main className="flex-1 flex flex-col justify-center px-6 gap-4 pb-6">
