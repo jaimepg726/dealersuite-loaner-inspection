@@ -153,7 +153,10 @@ export default function CSVImportModal({ onClose, onImportComplete }) {
           </div>
           <button
             onClick={onClose}
-            className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center"
+            disabled={phase === 'uploading'}
+            className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Close"
           >
             <X className="w-5 h-5 text-gray-400" />
           </button>

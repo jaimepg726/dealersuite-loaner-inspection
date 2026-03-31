@@ -78,8 +78,13 @@ function CarPositionGraphic({ stepIndex }) {
   )
 }
 
-export default function VideoRecorder({ onComplete }) {
+export default function VideoRecorder({ onComplete, overlayContext, onRecordingStarted, onRecordingStopped }) {
   const cam = useCamera()
+
+  // Forward vehicle/type/porter info to the canvas overlay renderer
+  useEffect(() => {
+    if (overlayContext) cam.setOverlayContext(overlayContext)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [phase,          setPhase]          = useState('loading')
   const [capturedPhotos, setCapturedPhotos] = useState([])
@@ -155,6 +160,7 @@ export default function VideoRecorder({ onComplete }) {
     setCapturedPhotos([])
     setPhase('recording')
     startOverlayTimers()
+    onRecordingStarted?.()
   }
 
   async function handleCapturePhoto() {
@@ -168,6 +174,7 @@ export default function VideoRecorder({ onComplete }) {
 
   async function handleStopRecording() {
     stopOverlayTimers()
+    onRecordingStopped?.(totalSecs)
     try {
       const blob = await cam.stopRecording()
       setVideoBlob(blob)
@@ -191,8 +198,9 @@ export default function VideoRecorder({ onComplete }) {
     if (continueFiredRef.current) { console.warn('Duplicate Continue prevented'); return }
     continueFiredRef.current = true
     setContinuing(true)
+    const geoData = cam.getGeoData()  // capture before camera stops
     cam.stopCamera()
-    onComplete(videoBlob, capturedPhotos)
+    onComplete(videoBlob, capturedPhotos, geoData)
   }
 
   function handleRetry() {
@@ -215,7 +223,11 @@ export default function VideoRecorder({ onComplete }) {
       {/* Video fills all remaining height; controls are overlaid so buttons
           are always reachable without scrolling regardless of orientation. */}
       <div className="relative flex-1 min-h-0 w-full bg-black rounded-2xl overflow-hidden">
-        <video ref={cam.videoRef} autoPlay muted playsInline
+        {/* Hidden video element — camera stream source for canvas rendering */}
+        <video ref={cam.videoRef} autoPlay muted playsInline className="hidden" />
+        {/* Visible canvas — shows the camera feed with burned-in timestamp/geo overlay.
+            This is also what MediaRecorder captures, so overlay appears in the file. */}
+        <canvas ref={cam.canvasRef}
           className={`absolute inset-0 w-full h-full object-cover ${phase === 'preview' ? 'opacity-30' : ''}`} />
 
         {/* Loading */}
@@ -239,10 +251,30 @@ export default function VideoRecorder({ onComplete }) {
         {/* Ready — Start button overlaid at bottom */}
         {phase === 'ready' && (
           <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 flex flex-col gap-2">
+            {/* Overlay burn-in warning — only on devices that don't support captureStream (iOS Safari) */}
+            {!cam.overlaySupported && (
+              <div className="bg-black/60 rounded-xl px-3 py-2 text-xs text-yellow-400 text-center">
+                {t('Timestamp overlay visible on screen only — not burned into video on this device', 'Marca de tiempo visible en pantalla solamente — no se graba en el video en este dispositivo')}
+              </div>
+            )}
+            {/* Non-blocking geo warning — only shown when definitely unavailable */}
+            {(cam.geoStatus === 'denied' || cam.geoStatus === 'unavailable') && (
+              <div className="bg-black/60 rounded-xl px-3 py-2 text-xs text-yellow-400 text-center">
+                {t('Location unavailable — video saves without geotag', 'Ubicación no disponible — video se guarda sin geotag')}
+              </div>
+            )}
             <button onClick={handleStartRecording} className="btn-primary w-full">
               <Video className="w-6 h-6" />{t('Start Recording', 'Iniciar Grabación')}
             </button>
             <p className="text-gray-400 text-xs text-center">{t('The app will guide you around the vehicle step by step.', 'La app lo guiará por el vehículo paso a paso.')}</p>
+          </div>
+        )}
+
+        {/* Recording — GPS live badge (top-right) */}
+        {phase === 'recording' && cam.geoStatus === 'granted' && capturedPhotos.length === 0 && (
+          <div className="absolute top-3 right-3 bg-green-900/80 border border-green-700 rounded-full px-2 py-0.5 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-green-300 text-xs font-bold">GPS</span>
           </div>
         )}
 

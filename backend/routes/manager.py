@@ -16,12 +16,13 @@ DELETE /api/manager/users/{id}           → soft-deactivate a user
 GET    /api/manager/drive-status         → Google Drive connection health check
 """
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from database import get_db
-from dependencies import require_manager, require_admin
+from dependencies import get_current_user, require_manager, require_admin
 from schemas.inspection import InspectionListResponse, InspectionResponse
 from schemas.damage import DamageListResponse, DamageResponse, DamageUpdate
 from schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse
@@ -471,3 +472,244 @@ async def cleanup_junk_execute(
         "deleted_damage_records": deleted_damages,
         "note": "Cascades removed orphaned media stubs. No Drive files were touched.",
     }
+
+
+# ---------------------------------------------------------------------------
+# Instruction Screenshots — any-auth GET, manager-only POST/DELETE
+# Screenshots stored as encrypted base64 data URLs in AppSettings.
+# ---------------------------------------------------------------------------
+
+_INSTR_SS_PREFIX  = "instr_ss_"
+_MAX_SS_BYTES     = 1_500_000           # 1.5 MB raw image limit
+_ALLOWED_SS_MIMES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@router.get(
+    "/instruction-screenshots",
+    summary="Get all uploaded instruction screenshots (any authenticated user)",
+)
+async def get_instruction_screenshots(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),   # porters may also read screenshots
+):
+    """Returns {screenshotKey: 'data:image/...;base64,...'} for every uploaded screenshot."""
+    from models.settings import AppSettings
+    from services.settings_service import decrypt_value
+
+    result = await db.execute(
+        select(AppSettings).where(AppSettings.key.like(f"{_INSTR_SS_PREFIX}%"))
+    )
+    rows = result.scalars().all()
+    out: dict = {}
+    for row in rows:
+        short_key = row.key[len(_INSTR_SS_PREFIX):]
+        if row.value:
+            try:
+                out[short_key] = decrypt_value(row.value)
+            except Exception:
+                pass
+    return out
+
+
+@router.post(
+    "/instruction-screenshots/{key}",
+    summary="Upload or replace a screenshot for an instruction step",
+)
+async def set_instruction_screenshot(
+    key: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """Accepts JPEG, PNG, or WebP up to 1.5 MB. Stored encrypted in AppSettings."""
+    import re as _re
+    import base64 as _b64
+
+    if not _re.match(r'^[a-z0-9][a-z0-9\-]*$', key) or len(key) > 60:
+        raise HTTPException(status_code=400, detail="Invalid screenshot key")
+    if file.content_type not in _ALLOWED_SS_MIMES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported image type '{file.content_type}'. Use JPEG, PNG, or WebP.",
+        )
+
+    raw = await file.read()
+    if len(raw) > _MAX_SS_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large — maximum 1.5 MB per screenshot")
+
+    data_url = f"data:{file.content_type};base64,{_b64.b64encode(raw).decode()}"
+    from services.settings_service import set_setting
+    await set_setting(db, f"{_INSTR_SS_PREFIX}{key}", data_url)
+    await db.commit()
+    return {"key": key, "stored": True}
+
+
+@router.delete(
+    "/instruction-screenshots/{key}",
+    status_code=204,
+    summary="Remove an instruction screenshot",
+)
+async def delete_instruction_screenshot(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """Removes the stored screenshot for the given step key."""
+    from services.settings_service import delete_setting
+    await delete_setting(db, f"{_INSTR_SS_PREFIX}{key}")
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Video Session Management — manager visibility into failed/incomplete sessions
+# ---------------------------------------------------------------------------
+
+_ACTIVE_STATUSES   = frozenset({"started", "recording", "ready_for_upload", "uploading"})
+_TERMINAL_STATUSES = frozenset({"completed", "failed_upload", "abandoned",
+                                 "closed_early", "interrupted", "expired"})
+_STALE_THRESHOLD   = timedelta(minutes=10)   # heartbeat gap before marking interrupted
+
+
+def _session_dict(s) -> dict:
+    """Serialize a VideoSession ORM row to a plain dict for the API response."""
+    def _iso(v): return v.isoformat() if v else None
+    return {
+        "id":               s.id,
+        "uuid":             s.uuid,
+        "inspection_id":    s.inspection_id,
+        "inspector_name":   s.inspector_name,
+        "loaner_number":    s.loaner_number,
+        "inspection_type":  s.inspection_type,
+        "status":           s.status,
+        "created_at":       _iso(s.created_at),
+        "recording_started_at": _iso(s.recording_started_at),
+        "recording_stopped_at": _iso(s.recording_stopped_at),
+        "upload_started_at":    _iso(s.upload_started_at),
+        "upload_finished_at":   _iso(s.upload_finished_at),
+        "last_heartbeat_at":    _iso(s.last_heartbeat_at),
+        "duration_seconds":     s.duration_seconds,
+        "min_duration_required": s.min_duration_required,
+        "min_duration_met":     s.min_duration_met,
+        "failure_reason":       s.failure_reason,
+        "interruption_type":    s.interruption_type,
+        "last_known_phase":     s.last_known_phase,
+        "app_backgrounded":     s.app_backgrounded,
+        "app_unloaded":         s.app_unloaded,
+        "upload_started":       s.upload_started,
+        "upload_finalized":     s.upload_finalized,
+    }
+
+
+@router.get("/video-sessions", summary="List video sessions with lazy expiry")
+async def list_video_sessions(
+    status_filter: str | None = Query(None, alias="status",
+        description="Filter by status. Use 'incomplete' for all non-completed."),
+    days:  int = Query(7,  ge=1, le=90),
+    skip:  int = Query(0,  ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """
+    Returns video sessions from the last N days.
+    Side-effect: lazily marks sessions with a stale heartbeat as 'interrupted'.
+    """
+    from models.video_session import VideoSession
+
+    cutoff       = datetime.now(timezone.utc) - timedelta(days=days)
+    stale_cutoff = datetime.now(timezone.utc) - _STALE_THRESHOLD
+
+    # Lazy expiry — any session still "active" with no recent heartbeat
+    stale_result = await db.execute(
+        select(VideoSession).where(
+            VideoSession.status.in_(list(_ACTIVE_STATUSES)),
+            VideoSession.created_at > cutoff,
+            or_(
+                VideoSession.last_heartbeat_at.is_(None),
+                VideoSession.last_heartbeat_at < stale_cutoff,
+            ),
+        )
+    )
+    stale_rows = stale_result.scalars().all()
+    if stale_rows:
+        for s in stale_rows:
+            s.status = "interrupted"
+            if not s.failure_reason:
+                s.failure_reason = "Heartbeat stopped — app may have closed unexpectedly"
+        await db.commit()
+
+    # Build query
+    q = select(VideoSession).where(VideoSession.created_at > cutoff)
+    if status_filter == "incomplete":
+        q = q.where(VideoSession.status.notin_(["completed"]))
+    elif status_filter:
+        q = q.where(VideoSession.status == status_filter)
+
+    # Total count
+    count_q = select(func.count()).select_from(q.subquery())
+    total   = (await db.execute(count_q)).scalar_one()
+
+    # Paged results
+    rows = (await db.execute(
+        q.order_by(VideoSession.created_at.desc()).offset(skip).limit(limit)
+    )).scalars().all()
+
+    return {"total": total, "sessions": [_session_dict(s) for s in rows]}
+
+
+@router.get("/video-sessions/stats", summary="Per-porter video session outcome stats")
+async def video_session_stats(
+    days: int = Query(30, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_manager),
+):
+    """Aggregate completion/failure stats grouped by porter name."""
+    from models.video_session import VideoSession
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows   = (await db.execute(
+        select(VideoSession).where(VideoSession.created_at > cutoff)
+    )).scalars().all()
+
+    # Group by inspector_name
+    by_name: dict[str, dict] = {}
+    for s in rows:
+        name = s.inspector_name or "Unknown"
+        if name not in by_name:
+            by_name[name] = {
+                "inspector_name":     name,
+                "total":              0,
+                "completed":          0,
+                "stopped_short":      0,
+                "interrupted":        0,
+                "other_incomplete":   0,
+                "_durations":         [],
+            }
+        p = by_name[name]
+        p["total"] += 1
+        if s.status == "completed":
+            p["completed"] += 1
+        elif s.status == "stopped_short":
+            p["stopped_short"] += 1
+        elif s.status in ("interrupted", "closed_early", "abandoned",
+                          "failed_upload", "expired"):
+            p["interrupted"] += 1
+        else:
+            p["other_incomplete"] += 1
+        if s.duration_seconds:
+            p["_durations"].append(s.duration_seconds)
+
+    result = []
+    for p in by_name.values():
+        durations = p.pop("_durations")
+        p["avg_duration_seconds"] = (
+            round(sum(durations) / len(durations), 1) if durations else None
+        )
+        p["completion_rate_pct"] = (
+            round(p["completed"] / p["total"] * 100) if p["total"] else 0
+        )
+        p["incomplete"] = p["total"] - p["completed"]
+        result.append(p)
+
+    result.sort(key=lambda x: x["total"], reverse=True)
+    return {"days": days, "porter_stats": result}

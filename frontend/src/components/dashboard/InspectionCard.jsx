@@ -4,7 +4,7 @@
  * Tapping navigates to InspectionDetail; Drive link opens externally.
  */
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, Camera, Video, AlertTriangle } from 'lucide-react'
+import { ExternalLink, Camera, Video, AlertTriangle, MapPin } from 'lucide-react'
 
 const TYPE_COLOR = {
   Checkout:  'bg-brand-blue/20 text-brand-blue',
@@ -116,6 +116,13 @@ export default function InspectionCard({ inspection }) {
                                  bg-yellow-900/40 text-yellow-400 border border-yellow-800/60
                                  px-2 py-0.5 rounded-full">
                   <AlertTriangle className="w-3 h-3" /> {inspection.damages.length}
+                </span>
+              )}
+              {inspection.geo_tagged && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold
+                                 bg-green-900/40 text-green-400 border border-green-800/60
+                                 px-2 py-0.5 rounded-full">
+                  <MapPin className="w-3 h-3" /> GPS
                 </span>
               )}
             </div>

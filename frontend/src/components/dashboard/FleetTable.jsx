@@ -67,7 +67,7 @@ function VehicleCard({ vehicle }) {
   )
 }
 
-export default function FleetTable({ vehicles, loading, error }) {
+export default function FleetTable({ vehicles, loading, error, statusFilter }) {
   if (loading) {
     return (
       <div className="flex flex-col gap-3">
@@ -88,11 +88,18 @@ export default function FleetTable({ vehicles, loading, error }) {
   }
 
   if (!vehicles || vehicles.length === 0) {
+    const isRetiredTab = statusFilter === 'Retired'
     return (
       <div className="flex flex-col items-center gap-4 py-12 text-center">
         <Car className="w-14 h-14 text-brand-accent" strokeWidth={1} />
-        <p className="text-gray-400 font-semibold">No vehicles in fleet yet</p>
-        <p className="text-gray-600 text-sm">Import a CSV from TSD Dealer to get started</p>
+        <p className="text-gray-400 font-semibold">
+          {isRetiredTab ? 'No retired vehicles' : 'No vehicles in fleet yet'}
+        </p>
+        <p className="text-gray-600 text-sm">
+          {isRetiredTab
+            ? 'Vehicles removed from a CSV import will appear here'
+            : 'Import a CSV from TSD Dealer to get started'}
+        </p>
       </div>
     )
   }

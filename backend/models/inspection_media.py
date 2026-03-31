@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Integer, Text, String, DateTime, ForeignKey, LargeBinary
+from sqlalchemy import Integer, Text, String, DateTime, ForeignKey, LargeBinary, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 from utils.time import utcnow
@@ -17,5 +17,12 @@ class InspectionMedia(Base):
     file_data:     Mapped[Optional[bytes]]= mapped_column(LargeBinary, nullable=True)
     file_hash:     Mapped[Optional[str]]  = mapped_column(String(64), nullable=True, index=True)
     created_at:    Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    geo_latitude:          Mapped[Optional[float]]    = mapped_column(Float,                    nullable=True)
+    geo_longitude:         Mapped[Optional[float]]    = mapped_column(Float,                    nullable=True)
+    geo_accuracy_m:        Mapped[Optional[float]]    = mapped_column(Float,                    nullable=True)
+    geo_timestamp_utc:     Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True),  nullable=True)
+    geo_permission_status: Mapped[Optional[str]]      = mapped_column(String(20),               nullable=True)
+    overlay_burned_in:     Mapped[bool]               = mapped_column(Boolean, default=False,   nullable=False, server_default="false")
 
     inspection = relationship("Inspection", back_populates="media", lazy="selectin")

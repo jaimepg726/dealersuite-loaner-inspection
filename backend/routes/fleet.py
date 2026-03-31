@@ -83,7 +83,14 @@ async def list_fleet_vehicles(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_manager),
 ):
-    query = select(Vehicle).where(Vehicle.is_active == True)  # noqa: E712
+    # "Retired" tab shows decommissioned vehicles (is_active=False, status='Retired').
+    # Every other view — including "All" — shows only active vehicles (is_active=True)
+    # so retired units never bleed into the working fleet view.
+    if status and status.lower() == "retired":
+        query = select(Vehicle).where(Vehicle.is_active == False)  # noqa: E712
+        status = None  # already scoped to retired; don't also filter by status below
+    else:
+        query = select(Vehicle).where(Vehicle.is_active == True)  # noqa: E712
 
     if status:
         query = query.where(Vehicle.status == status)

@@ -20,6 +20,7 @@ import api from '../utils/api'
 import { t } from '../utils/lang'
 import PageHeader from '../components/ui/PageHeader'
 import useInspection from '../hooks/useInspection'
+import useVideoSession from '../hooks/useVideoSession'
 import VideoRecorder from '../components/inspection/VideoRecorder'
 import DamageLogger from '../components/inspection/DamageLogger'
 import UploadProgress from '../components/inspection/UploadProgress'
@@ -69,6 +70,7 @@ export default function InspectPage() {
   const navigate  = useNavigate()
 
   const { inspection, inspectionRef, starting, uploading, error, start, startCondition, uploadFile, complete, reset } = useInspection()
+  const session = useVideoSession()
 
   const vehicle      = location.state?.vehicle ?? null
   const conditionVin = location.state?.conditionVin ?? null
@@ -86,6 +88,7 @@ export default function InspectPage() {
   const videoBlobRef      = useRef(null)
   const photoBlobsRef     = useRef([])
   const damagesRef        = useRef([])
+  const geoDataRef        = useRef(null)
   const uploadsStartedRef   = useRef(false)
   const videoCaptureLockRef = useRef(false)
 
@@ -98,6 +101,14 @@ export default function InspectPage() {
     if (isCondition && !conditionVin) { setPhase('error'); return }
     if (!isCondition && !vehicleId) { setPhase('error'); return }
     setPhase('recording')
+    const porterName = (() => {
+      try { return JSON.parse(sessionStorage.getItem('currentUser') || 'null')?.name } catch { return null }
+    })()
+    session.createSession({
+      inspectorName: porterName,
+      loanerNumber:  vehicle?.loaner_number ?? null,
+      inspectionType: type,
+    })
     return () => { reset() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -114,13 +125,14 @@ export default function InspectPage() {
 
   // ── Transitions ──────────────────────────────────────────────────────────────────
   // handleVideoComplete is the FIRST point of real work — the DB row is created here.
-  async function handleVideoComplete(videoBlob, capturedPhotos) {
+  async function handleVideoComplete(videoBlob, capturedPhotos, geoData) {
     if (videoCaptureLockRef.current) { console.warn('Duplicate capture prevented'); return }
     videoCaptureLockRef.current = true
     console.info('Video captured:', type + '_' + new Date().toISOString())
 
     videoBlobRef.current  = videoBlob
     photoBlobsRef.current = capturedPhotos
+    geoDataRef.current    = geoData ?? null
 
     // Create the inspection row now that the porter has done real work.
     // inspectionRef.current is set synchronously inside start/startCondition so
@@ -137,6 +149,8 @@ export default function InspectPage() {
       setPhase('error')
       return
     }
+
+    session.markInspectionCreated(inspectionRef.current?.id)
 
     // Condition videos skip damage logging — go straight to upload
     if (type === 'condition') {
@@ -205,6 +219,7 @@ export default function InspectPage() {
 
     setUploadSteps([...steps])
     setUploadError(null)
+    session.markUploadStarted()
     setPhase('uploading')
 
     let si = 0
@@ -215,7 +230,7 @@ export default function InspectPage() {
       // Step 1 — video
       if (videoBlob) {
         mark('active')
-        try { await uploadFile(videoBlob, 'video') }
+        try { await uploadFile(videoBlob, 'video', null, geoDataRef.current) }
         catch (err) {
           if (err.finalizeFailedAfterUpload) {
             // Drive upload succeeded but finalize-upload failed after all retries.
@@ -272,12 +287,15 @@ export default function InspectPage() {
       mark('active')
       await complete(photoResults.length)
       mark('done')
+      session.markUploadComplete()
       try { sessionStorage.removeItem('ds_upload_pending') } catch {}
       setPhase('done')
 
     } catch (err) {
       mark('error')
-      setUploadError(err.response?.data?.detail || err.message || 'Something went wrong')
+      const reason = err.response?.data?.detail || err.message || 'Something went wrong'
+      setUploadError(reason)
+      session.markUploadFailed(reason)
     }
   }
 
@@ -410,7 +428,20 @@ export default function InspectPage() {
             {STEP_LABEL[phase]}
           </span>
         </div>
-        {phase === 'recording' && <VideoRecorder onComplete={handleVideoComplete} />}
+        {phase === 'recording' && (
+          <VideoRecorder
+            onComplete={handleVideoComplete}
+            onRecordingStarted={session.markRecordingStarted}
+            onRecordingStopped={(secs) => session.markRecordingStopped(secs, type)}
+            overlayContext={{
+              vehicleLabel: vehicle?.loaner_number ?? null,
+              type: type ?? '',
+              porter: (() => {
+                try { return JSON.parse(sessionStorage.getItem('currentUser') || 'null')?.name } catch { return null }
+              })(),
+            }}
+          />
+        )}
         {phase === 'damage' && (
           <DamageLogger capturedPhotos={photoBlobsRef.current} onComplete={handleDamageComplete} onSkip={handleSkipDamage} />
         )}

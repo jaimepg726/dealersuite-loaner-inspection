@@ -72,8 +72,10 @@ export default function FleetPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={loadFleet}
+              disabled={loading}
               className="w-11 h-11 bg-brand-mid border border-brand-accent rounded-xl
-                         flex items-center justify-center active:scale-95 transition-transform"
+                         flex items-center justify-center active:scale-95 transition-transform
+                         disabled:opacity-50"
               aria-label="Refresh"
             >
               <RefreshCw className={`w-5 h-5 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
@@ -90,8 +92,8 @@ export default function FleetPage() {
           </div>
         </div>
 
-        {/* ── Fleet summary bar ───────────────────────────────────────── */}
-        {!loading && vehicles.length > 0 && (
+        {/* ── Fleet summary bar — only shown for active fleet views ───── */}
+        {!loading && vehicles.length > 0 && statusFilter !== 'Retired' && (
           <div className="grid grid-cols-4 gap-2 mb-4">
             {[
               { label: 'Total',      value: summary.total,     color: 'text-brand-white' },
@@ -107,6 +109,16 @@ export default function FleetPage() {
                 <div className="text-xs text-gray-500 mt-1 font-medium">{label}</div>
               </div>
             ))}
+          </div>
+        )}
+        {/* Retired tab: show a simple count instead of the active-fleet stats grid */}
+        {!loading && statusFilter === 'Retired' && vehicles.length > 0 && (
+          <div className="bg-brand-mid border border-brand-accent rounded-xl px-4 py-3 mb-4
+                          flex items-center gap-3">
+            <span className="text-2xl font-extrabold text-gray-400">{vehicles.length}</span>
+            <span className="text-sm text-gray-500 font-medium">
+              retired unit{vehicles.length !== 1 ? 's' : ''} — removed from active fleet during CSV import
+            </span>
           </div>
         )}
 
@@ -169,6 +181,7 @@ export default function FleetPage() {
           vehicles={vehicles}
           loading={loading}
           error={error}
+          statusFilter={statusFilter}
         />
       </div>
 

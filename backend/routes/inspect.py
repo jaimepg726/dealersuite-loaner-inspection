@@ -66,11 +66,18 @@ class UploadSessionResponse(BaseModel):
 
 
 class FinalizeUploadBody(BaseModel):
-    media_record_id: int
-    drive_file_id: str
-    mime_type: str
-    media_type: str        # "video" | "photo"
-    file_size: int = 0
+    media_record_id:       int
+    drive_file_id:         str
+    mime_type:             str
+    media_type:            str        # "video" | "photo"
+    file_size:             int = 0
+    # Geo metadata (optional — only video records have this)
+    geo_latitude:          float | None = None
+    geo_longitude:         float | None = None
+    geo_accuracy_m:        float | None = None
+    geo_timestamp_utc:     str | None = None    # ISO 8601 string from frontend
+    geo_permission_status: str | None = None
+    overlay_burned_in:     bool = False
 
 
 class FinalizeUploadResponse(BaseModel):
@@ -294,6 +301,23 @@ async def finalize_upload(
     record.file_url = drive_url
     record.media_type = body.media_type
     record.mime_type = body.mime_type
+
+    # Save geo metadata if provided
+    from datetime import timezone as _tz
+    record.geo_latitude          = body.geo_latitude
+    record.geo_longitude         = body.geo_longitude
+    record.geo_accuracy_m        = body.geo_accuracy_m
+    record.geo_permission_status = body.geo_permission_status
+    record.overlay_burned_in     = body.overlay_burned_in
+    if body.geo_timestamp_utc:
+        try:
+            from datetime import datetime as _dt
+            record.geo_timestamp_utc = _dt.fromisoformat(
+                body.geo_timestamp_utc.replace('Z', '+00:00')
+            )
+        except ValueError:
+            pass  # invalid timestamp — skip
+
     await db.commit()
 
     logger.info("Finalized direct Drive upload: media %d -> %s", record.id, body.drive_file_id)
@@ -310,7 +334,12 @@ async def finalize_upload(
 async def upload_media(
     inspection_id: int,
     file: UploadFile = File(...),
-    damage_location: str | None = Query(None),
+    damage_location:       str   | None = Query(None),
+    geo_latitude:          float | None = Query(None),
+    geo_longitude:         float | None = Query(None),
+    geo_accuracy_m:        float | None = Query(None),
+    geo_permission_status: str   | None = Query(None),
+    overlay_burned_in:     bool         = Query(False),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -399,6 +428,11 @@ async def upload_media(
     db.add(record)
     await db.flush()
     record.file_url = f"/api/media/{record.id}"
+    record.geo_latitude          = geo_latitude
+    record.geo_longitude         = geo_longitude
+    record.geo_accuracy_m        = geo_accuracy_m
+    record.geo_permission_status = geo_permission_status
+    record.overlay_burned_in     = overlay_burned_in
     await db.commit()
 
     # Try Drive upload opportunistically

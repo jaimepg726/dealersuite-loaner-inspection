@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Settings, RefreshCw, HardDrive, CheckCircle,
   UserPlus, Users, X, Eye, EyeOff, ExternalLink, Unlink, Zap,
-  WifiOff, CloudOff, Activity, Database, BookOpen, ChevronRight, Trash2,
+  WifiOff, CloudOff, Activity, Database, BookOpen, ChevronRight, Trash2, Video,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../utils/api'
@@ -551,21 +551,38 @@ export default function SettingsPage() {
         {/* Instructions */}
         <div>
           <SectionTitle>Instructions</SectionTitle>
-          <button
-            onClick={() => navigate('/dashboard/instructions')}
-            className="w-full card flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
-          >
-            <div className="w-11 h-11 bg-brand-blue/10 rounded-2xl flex items-center justify-center shrink-0">
-              <BookOpen className="w-5 h-5 text-brand-blue" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm text-brand-white">Staff Training Guide</p>
-              <p className="text-gray-500 text-xs mt-0.5">
-                Step-by-step instructions in English and Spanish
-              </p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => navigate('/dashboard/instructions')}
+              className="w-full card flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
+            >
+              <div className="w-11 h-11 bg-brand-blue/10 rounded-2xl flex items-center justify-center shrink-0">
+                <BookOpen className="w-5 h-5 text-brand-blue" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-brand-white">Staff Training Guide</p>
+                <p className="text-gray-500 text-xs mt-0.5">
+                  Step-by-step instructions in English and Spanish
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
+            </button>
+            <button
+              onClick={() => navigate('/dashboard/video-sessions')}
+              className="w-full card flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
+            >
+              <div className="w-11 h-11 bg-orange-500/10 rounded-2xl flex items-center justify-center shrink-0">
+                <Video className="w-5 h-5 text-orange-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-brand-white">Video Session Log</p>
+                <p className="text-gray-500 text-xs mt-0.5">
+                  Recording attempts, interruptions &amp; completion rates
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />
+            </button>
+          </div>
         </div>
 
         {/* Google Drive */}

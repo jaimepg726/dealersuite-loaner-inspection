@@ -19,8 +19,9 @@ import FleetPage        from './pages/dashboard/FleetPage'
 import DamagePage       from './pages/dashboard/DamagePage'
 import ReportsPage      from './pages/dashboard/ReportsPage'
 import SettingsPage      from './pages/dashboard/SettingsPage'
-import InstructionsPage  from './pages/dashboard/InstructionsPage'
-import LoanersPage       from './pages/dashboard/LoanersPage'
+import InstructionsPage    from './pages/dashboard/InstructionsPage'
+import LoanersPage         from './pages/dashboard/LoanersPage'
+import VideoSessionsPage   from './pages/dashboard/VideoSessionsPage'
 
 export default function App() {
   return (
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="reports"                 element={<ReportsPage />} />
           <Route path="settings"                element={<SettingsPage />} />
           <Route path="instructions"            element={<InstructionsPage />} />
+          <Route path="video-sessions"          element={<VideoSessionsPage />} />
         </Route>
 
         {/* ── Catch-all ──────────────────────────────────────────────── */}

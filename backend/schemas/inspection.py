@@ -24,10 +24,15 @@ class InspectionComplete(BaseModel):
 
 
 class MediaItem(BaseModel):
-    id:         int
-    file_url:   str
-    media_type: str  # "photo" | "video"
-    created_at: datetime
+    id:                    int
+    file_url:              str
+    media_type:            str  # "photo" | "video"
+    created_at:            datetime
+    geo_latitude:          Optional[float] = None
+    geo_longitude:         Optional[float] = None
+    geo_accuracy_m:        Optional[float] = None
+    geo_permission_status: Optional[str]   = None
+    overlay_burned_in:     bool            = False
 
     class Config:
         from_attributes = True
@@ -99,23 +104,25 @@ class InspectionSummary(BaseModel):
     vin_override:     Optional[str]    = None
     photo_count:      int              = 0
     video_count:      int              = 0
+    geo_tagged:       bool             = False
     drive_folder_url: Optional[str]    = None
     started_at:       datetime
     completed_at:     Optional[datetime] = None
     vehicle:          Optional[VehicleBrief] = None
 
-    # Loaded for video_count computation only — excluded from the API response.
+    # Loaded for video_count + geo_tagged computation only — excluded from the API response.
     # Populated when list_inspections eager-loads Inspection.media.
     media: list = Field(default=[], exclude=True)
 
     @model_validator(mode='after')
     def _compute_video_count(self):
-        """Count non-pending video records from the loaded media relationship."""
-        self.video_count = sum(
-            1 for m in self.media
-            if getattr(m, 'media_type', '') == 'video'
-            and getattr(m, 'file_url', 'pending') != 'pending'
-        )
+        """Count non-pending video records and check for geotagged media."""
+        active = [
+            m for m in self.media
+            if getattr(m, 'file_url', 'pending') != 'pending'
+        ]
+        self.video_count = sum(1 for m in active if getattr(m, 'media_type', '') == 'video')
+        self.geo_tagged  = any(getattr(m, 'geo_latitude', None) is not None for m in active)
         return self
 
     class Config:

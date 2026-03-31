@@ -20,7 +20,7 @@
  *                   walk-pass-front-wheel, walk-front-bumper, walk-windshield-hood
  */
 
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -35,7 +35,14 @@ import {
   CheckCircle,
   Upload,
   HelpCircle,
+  Pencil,
+  Printer,
+  ImagePlus,
+  Trash2,
+  RefreshCw,
 } from 'lucide-react'
+import api from '../../utils/api'
+import { useAuth } from '../../context/AuthContext'
 
 // ── Section metadata (language-independent) ───────────────────────────────────
 const SECTIONS_META = [
@@ -474,16 +481,69 @@ const CONTENT = {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function ScreenshotSlot({ src, label }) {
-  if (src) {
+function ScreenshotSlot({ screenshotKey, src, label, editMode, onUpload, onDelete, uploading }) {
+  const fileRef = useRef(null)
+  const hasSrc  = Boolean(src)
+
+  // View mode — show image or nothing (clean for porters)
+  if (!editMode) {
+    if (!hasSrc) return null
     return <img src={src} alt={label} className="mt-3 w-full rounded-xl" />
   }
+
+  // Manager edit mode — show upload controls
   return (
-    <div className="mt-3 w-full rounded-xl border border-dashed border-brand-accent/50
-                    flex items-center justify-center py-4 bg-brand-mid/30">
-      <span className="text-gray-600 text-xs font-mono tracking-wide">
-        [ screenshot: {label} ]
-      </span>
+    <div className="mt-3 print:hidden">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => onUpload(screenshotKey, e.target.files?.[0])}
+      />
+      {hasSrc ? (
+        <div className="relative rounded-xl overflow-hidden border border-brand-accent">
+          <img src={src} alt={label} className="w-full" />
+          <div className="absolute top-2 right-2 flex gap-1.5">
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="bg-black/70 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg
+                         flex items-center gap-1.5 active:scale-95 transition-transform
+                         disabled:opacity-50"
+            >
+              <ImagePlus className="w-3 h-3" /> Replace
+            </button>
+            <button
+              onClick={() => onDelete(screenshotKey)}
+              disabled={uploading}
+              className="bg-red-700/80 text-white text-xs font-bold px-2 py-1.5 rounded-lg
+                         flex items-center active:scale-95 transition-transform
+                         disabled:opacity-50"
+              aria-label="Remove screenshot"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="w-full rounded-xl border border-dashed border-brand-blue/40
+                     flex flex-col items-center justify-center py-5 gap-2
+                     bg-brand-blue/5 active:bg-brand-blue/10 transition-colors
+                     active:scale-[0.99] disabled:opacity-50"
+        >
+          {uploading
+            ? <RefreshCw className="w-4 h-4 text-brand-blue animate-spin" />
+            : <ImagePlus className="w-5 h-5 text-gray-500" />
+          }
+          <span className="text-xs text-gray-500 font-medium">
+            {uploading ? 'Uploading…' : 'Tap to add screenshot'}
+          </span>
+        </button>
+      )}
     </div>
   )
 }
@@ -511,7 +571,7 @@ function WarningBox({ label, text }) {
   )
 }
 
-function WalkaroundCard({ number, step, screenshotKey }) {
+function WalkaroundCard({ number, step, screenshotKey, src, editMode, onUpload, onDelete, uploading }) {
   return (
     <div className="bg-brand-dark rounded-xl border border-brand-accent/60 overflow-hidden">
       {/* Header */}
@@ -525,7 +585,15 @@ function WalkaroundCard({ number, step, screenshotKey }) {
 
       {/* Screenshot slot */}
       <div className="px-3">
-        <ScreenshotSlot src={step.screenshot} label={screenshotKey} />
+        <ScreenshotSlot
+          screenshotKey={screenshotKey}
+          src={src}
+          label={screenshotKey}
+          editMode={editMode}
+          onUpload={onUpload}
+          onDelete={onDelete}
+          uploading={uploading}
+        />
       </div>
 
       {/* Hint + tip */}
@@ -539,8 +607,10 @@ function WalkaroundCard({ number, step, screenshotKey }) {
   )
 }
 
-function SectionCard({ meta, section, tipLabel, warningLabel, walkaroundIntro }) {
+function SectionCard({ meta, section, tipLabel, warningLabel, walkaroundIntro,
+                       screenshots, editMode, onUpload, onDelete, uploading }) {
   const { icon: Icon, iconBg, iconColor, screenshotKey } = meta
+  const sectionSrc = screenshots[screenshotKey] || section.screenshot
 
   return (
     <div className="bg-brand-mid rounded-2xl border border-brand-accent overflow-hidden">
@@ -556,8 +626,16 @@ function SectionCard({ meta, section, tipLabel, warningLabel, walkaroundIntro })
 
       <div className="px-4 pt-3 pb-4 flex flex-col gap-3">
 
-        {/* Section screenshot placeholder */}
-        <ScreenshotSlot src={section.screenshot} label={screenshotKey} />
+        {/* Section screenshot */}
+        <ScreenshotSlot
+          screenshotKey={screenshotKey}
+          src={sectionSrc}
+          label={screenshotKey}
+          editMode={editMode}
+          onUpload={onUpload}
+          onDelete={onDelete}
+          uploading={uploading.has(screenshotKey)}
+        />
 
         {/* Step bullets */}
         <ul className="flex flex-col gap-1.5">
@@ -581,14 +659,22 @@ function SectionCard({ meta, section, tipLabel, warningLabel, walkaroundIntro })
         {section.walkaround && (
           <div className="flex flex-col gap-3 mt-1">
             <p className="text-gray-500 text-xs">{walkaroundIntro}</p>
-            {section.walkaround.map((step, i) => (
-              <WalkaroundCard
-                key={i}
-                number={i + 1}
-                step={step}
-                screenshotKey={WALKAROUND_SCREENSHOT_KEYS[i]}
-              />
-            ))}
+            {section.walkaround.map((step, i) => {
+              const wKey = WALKAROUND_SCREENSHOT_KEYS[i]
+              return (
+                <WalkaroundCard
+                  key={i}
+                  number={i + 1}
+                  step={step}
+                  screenshotKey={wKey}
+                  src={screenshots[wKey] || step.screenshot}
+                  editMode={editMode}
+                  onUpload={onUpload}
+                  onDelete={onDelete}
+                  uploading={uploading.has(wKey)}
+                />
+              )
+            })}
           </div>
         )}
 
@@ -599,9 +685,52 @@ function SectionCard({ meta, section, tipLabel, warningLabel, walkaroundIntro })
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function InstructionsPage() {
-  const navigate = useNavigate()
-  const [lang, setLang] = useState('en')
+  const navigate    = useNavigate()
+  const { isManager } = useAuth()
+  const [lang,        setLang]        = useState('en')
+  const [screenshots, setScreenshots] = useState({})
+  const [editMode,    setEditMode]    = useState(false)
+  const [uploading,   setUploading]   = useState(new Set())
   const content = CONTENT[lang]
+
+  // Load stored screenshots on mount (all authenticated users)
+  useEffect(() => {
+    api.get('/api/manager/instruction-screenshots')
+      .then(({ data }) => setScreenshots(data))
+      .catch(() => {})   // optional enhancement — fail silently
+  }, [])
+
+  const handleUpload = useCallback(async (key, file) => {
+    if (!file) return
+    setUploading(prev => new Set([...prev, key]))
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      await api.post(`/api/manager/instruction-screenshots/${key}`, form)
+      // Compute data URL locally for immediate preview (same bytes as stored)
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      setScreenshots(prev => ({ ...prev, [key]: dataUrl }))
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Upload failed')
+    } finally {
+      setUploading(prev => { const s = new Set(prev); s.delete(key); return s })
+    }
+  }, [])
+
+  const handleDelete = useCallback(async (key) => {
+    if (!window.confirm('Remove this screenshot?')) return
+    try {
+      await api.delete(`/api/manager/instruction-screenshots/${key}`)
+      setScreenshots(prev => { const n = { ...prev }; delete n[key]; return n })
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Could not remove screenshot')
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col pb-12">
@@ -612,7 +741,8 @@ export default function InstructionsPage() {
         <button
           onClick={() => navigate(-1)}
           className="w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl
-                     flex items-center justify-center active:scale-95 transition-transform shrink-0"
+                     flex items-center justify-center active:scale-95 transition-transform shrink-0
+                     print:hidden"
           aria-label="Back"
         >
           <ArrowLeft className="w-4 h-4 text-gray-400" />
@@ -625,7 +755,8 @@ export default function InstructionsPage() {
         </div>
 
         {/* Language toggle */}
-        <div className="flex gap-1 shrink-0 bg-brand-mid border border-brand-accent rounded-xl p-1">
+        <div className="flex gap-1 shrink-0 bg-brand-mid border border-brand-accent rounded-xl p-1
+                        print:hidden">
           {['en', 'es'].map((l) => (
             <button
               key={l}
@@ -638,7 +769,49 @@ export default function InstructionsPage() {
             </button>
           ))}
         </div>
+
+        {/* Print button */}
+        <button
+          onClick={() => window.print()}
+          className="print:hidden w-9 h-9 bg-brand-mid border border-brand-accent rounded-xl
+                     flex items-center justify-center active:scale-95 transition-transform shrink-0"
+          aria-label="Print guide"
+        >
+          <Printer className="w-4 h-4 text-gray-400" />
+        </button>
+
+        {/* Edit screenshots toggle — manager only */}
+        {isManager && (
+          <button
+            onClick={() => setEditMode(e => !e)}
+            className={`print:hidden w-9 h-9 rounded-xl border flex items-center justify-center
+                        active:scale-95 transition-transform shrink-0
+                        ${editMode
+                          ? 'bg-brand-blue border-brand-blue text-white'
+                          : 'bg-brand-mid border-brand-accent text-gray-400'
+                        }`}
+            aria-label={editMode ? 'Done editing screenshots' : 'Edit screenshots'}
+            title={editMode ? 'Done editing' : 'Edit screenshots'}
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+        )}
       </div>
+
+      {/* Edit mode banner */}
+      {editMode && (
+        <div className="print:hidden mx-4 mt-4 bg-brand-blue/10 border border-brand-blue/30
+                        rounded-2xl px-4 py-3 flex items-center gap-3">
+          <Pencil className="w-4 h-4 text-brand-blue shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-brand-blue text-sm font-bold">Screenshot Edit Mode</p>
+            <p className="text-blue-400 text-xs mt-0.5">
+              Tap the upload area under any step to add or replace a screenshot.
+              Tap the pencil icon again when done.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Sections */}
       <div className="px-4 pt-4 flex flex-col gap-4">
@@ -650,6 +823,11 @@ export default function InstructionsPage() {
             tipLabel={content.tipLabel}
             warningLabel={content.warningLabel}
             walkaroundIntro={content.walkaroundIntro}
+            screenshots={screenshots}
+            editMode={editMode}
+            onUpload={handleUpload}
+            onDelete={handleDelete}
+            uploading={uploading}
           />
         ))}
       </div>

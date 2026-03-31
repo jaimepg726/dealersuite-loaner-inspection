@@ -36,3 +36,17 @@ export const WALKROUND_STEPS = [
  * Current value: 72s (covers all 9 steps at their full durations = 71s total, plus 1s buffer).
  */
 export const MIN_RECORD_SECONDS = 72
+
+/**
+ * Per-inspection-type minimum duration (seconds) for session audit logging.
+ * The UI enforces MIN_RECORD_SECONDS for the walkround; these values are used
+ * by the session tracker to record whether the minimum was met for each type.
+ * A session recorded below its type minimum is flagged as stopped_short.
+ */
+export const MIN_DURATION_BY_TYPE = {
+  checkout:  72,
+  checkin:   72,
+  inventory: 45,
+  sales:     45,
+  condition: 30,
+}

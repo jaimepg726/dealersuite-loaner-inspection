@@ -27,6 +27,37 @@ _CREATE_TABLES = [
         created_at TIMESTAMPTZ DEFAULT now()
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS video_sessions (
+        id SERIAL PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        inspection_id INTEGER REFERENCES inspections(id) ON DELETE SET NULL,
+        inspector_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        inspector_name  VARCHAR(200),
+        loaner_number   VARCHAR(50),
+        inspection_type VARCHAR(50),
+        status VARCHAR(50) NOT NULL DEFAULT 'started',
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_heartbeat_at    TIMESTAMPTZ,
+        recording_started_at TIMESTAMPTZ,
+        recording_stopped_at TIMESTAMPTZ,
+        upload_started_at    TIMESTAMPTZ,
+        upload_finished_at   TIMESTAMPTZ,
+        duration_seconds      FLOAT,
+        min_duration_required FLOAT,
+        min_duration_met  BOOLEAN NOT NULL DEFAULT false,
+        last_known_phase  VARCHAR(50),
+        failure_reason    VARCHAR(500),
+        interruption_type VARCHAR(50),
+        app_backgrounded BOOLEAN NOT NULL DEFAULT false,
+        app_unloaded     BOOLEAN NOT NULL DEFAULT false,
+        upload_started   BOOLEAN NOT NULL DEFAULT false,
+        upload_finalized BOOLEAN NOT NULL DEFAULT false
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_video_sessions_status     ON video_sessions (status)",
+    "CREATE INDEX IF NOT EXISTS ix_video_sessions_created_at ON video_sessions (created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_video_sessions_inspector  ON video_sessions (inspector_id)",
 ]
 
 

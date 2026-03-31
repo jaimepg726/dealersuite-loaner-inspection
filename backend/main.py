@@ -26,6 +26,7 @@ from routes.google_oauth import router as google_oauth_router
 from routes.system      import router as system_router
 from routes.admin       import router as admin_router
 from routes.media       import router as media_router
+from routes.sessions    import router as sessions_router
 from migrations import run_migrations
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,7 @@ app.include_router(google_oauth_router, prefix="/api/auth/google",  tags=["googl
 app.include_router(system_router,       prefix="/api/system",       tags=["system"])
 app.include_router(admin_router,        prefix="/api/admin",        tags=["admin"])
 app.include_router(media_router,        prefix="/api/media",        tags=["media"])
+app.include_router(sessions_router,     prefix="/api/sessions",     tags=["sessions"])
 
 
 @app.get("/health", tags=["system"])

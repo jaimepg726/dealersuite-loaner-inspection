@@ -91,7 +91,7 @@ async def import_fleet_csv(
                 Vehicle.vehicle_type == "Loaner",
                 Vehicle.is_active == True,  # noqa: E712
             )
-            .values(is_active=False)
+            .values(is_active=False, status="Retired")
             .execution_options(synchronize_session="fetch")
         )
         result_proxy = await db.execute(stmt)

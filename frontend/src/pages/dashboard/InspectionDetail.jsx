@@ -173,61 +173,45 @@ function PhotoModal({ photos, startIdx, onClose }) {
 }
 
 // ── VideoPlayer ───────────────────────────────────────────────────────────────
+// Uses /api/media/{id}/stream which proxies Drive with Range/206 support so
+// the browser can seek immediately without downloading the full file.
+// Legacy DB records (file_url starts with /api/media/) use that URL directly.
 function VideoPlayer({ m }) {
-  const [src,     setSrc]     = useState(null)
-  const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
-  const objUrlRef = useRef(null)
+  const [errMsg,  setErrMsg]  = useState(null)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(false)
-    setSrc(null)
+  let src = null
+  if (isDriveUrl(m.file_url)) {
+    const token = localStorage.getItem('ds_token') || ''
+    src = `/api/media/${m.id}/stream?token=${encodeURIComponent(token)}`
+  } else if (m.file_url && m.file_url !== 'pending') {
+    src = m.file_url
+  }
 
-    if (isDriveUrl(m.file_url)) {
-      fetchDriveBlob(m.id)
-        .then(({ objectUrl }) => {
-          if (cancelled) { URL.revokeObjectURL(objectUrl); return }
-          objUrlRef.current = objectUrl
-          setSrc(objectUrl)
-          setLoading(false)
-        })
-        .catch(() => {
-          if (!cancelled) { setError(true); setLoading(false) }
-        })
-    } else {
-      setSrc(m.file_url)
-      setLoading(false)
-    }
-
-    return () => {
-      cancelled = true
-      if (objUrlRef.current) { URL.revokeObjectURL(objUrlRef.current); objUrlRef.current = null }
-    }
-  }, [m.id, m.file_url])
+  if (!src) {
+    return (
+      <div className="rounded-xl overflow-hidden bg-brand-mid border border-brand-accent aspect-video w-full flex items-center justify-center">
+        <span className="text-gray-500 text-sm">No video available</span>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-xl overflow-hidden bg-black border border-brand-accent relative aspect-video w-full">
-      {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-brand-mid z-10">
-          <Loader className="w-6 h-6 text-brand-blue animate-spin" />
-          <span className="text-xs text-gray-500">Loading video…</span>
-        </div>
-      )}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center gap-2 text-gray-500">
-          <WifiOff className="w-5 h-5" />
-          <span className="text-sm">Video may still be processing — check back in a few minutes</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500 px-6 text-center">
+          <WifiOff className="w-5 h-5 shrink-0" />
+          <span className="text-sm">{errMsg || 'Video unavailable — it may still be processing'}</span>
         </div>
       )}
-      {src && !error && (
+      {!error && (
         <video
+          key={src}
           src={src}
           controls
           preload="metadata"
           className="w-full h-full object-contain"
-          onLoadedMetadata={() => setLoading(false)}
+          onError={() => { setError(true); setErrMsg('Video could not be played — try again in a moment') }}
         />
       )}
     </div>
@@ -454,6 +438,14 @@ export default function InspectionDetail() {
               <p className="text-gray-400 text-sm mt-1.5">
                 Inspector: <span className="text-gray-300">{inspection.inspector_name}</span>
               </p>
+            )}
+            {/* Geo badge — shown when any video was geotagged */}
+            {media.some(m => m.geo_latitude != null) && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold
+                               bg-green-900/40 text-green-400 border border-green-800/60
+                               px-2 py-0.5 rounded-full mt-1.5">
+                📍 Geotagged
+              </span>
             )}
             {inspection.notes && (
               <p className="text-gray-400 text-sm mt-2 pt-2 border-t border-brand-accent">
