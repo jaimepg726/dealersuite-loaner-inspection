@@ -208,17 +208,25 @@ export default function VideoRecorder({ onComplete }) {
   const allDone      = isLastStep && stepSecsLeft === 0
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative w-full bg-black rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
-        <video ref={cam.videoRef} autoPlay muted playsInline
-          className={`w-full h-full object-cover ${phase === 'preview' ? 'opacity-30' : ''}`} />
+    // flex-1 + min-h-0 lets this component fill all available height without
+    // overflowing — works in both portrait and landscape on phone or iPad.
+    <div className="flex flex-col flex-1 min-h-0">
 
+      {/* Video fills all remaining height; controls are overlaid so buttons
+          are always reachable without scrolling regardless of orientation. */}
+      <div className="relative flex-1 min-h-0 w-full bg-black rounded-2xl overflow-hidden">
+        <video ref={cam.videoRef} autoPlay muted playsInline
+          className={`absolute inset-0 w-full h-full object-cover ${phase === 'preview' ? 'opacity-30' : ''}`} />
+
+        {/* Loading */}
         {phase === 'loading' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70">
             <Loader className="w-10 h-10 text-brand-blue animate-spin" />
             <p className="text-white text-sm font-semibold">{t('Starting camera…', 'Iniciando cámara…')}</p>
           </div>
         )}
+
+        {/* Error */}
         {phase === 'error' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
             <AlertCircle className="w-10 h-10 text-red-400" />
@@ -227,22 +235,38 @@ export default function VideoRecorder({ onComplete }) {
             <button onClick={handleRetry} className="btn-ghost text-sm mt-2 w-auto px-6"><RefreshCw className="w-4 h-4" /> {t('Try Again', 'Intentar de nuevo')}</button>
           </div>
         )}
+
+        {/* Ready — Start button overlaid at bottom */}
+        {phase === 'ready' && (
+          <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 flex flex-col gap-2">
+            <button onClick={handleStartRecording} className="btn-primary w-full">
+              <Video className="w-6 h-6" />{t('Start Recording', 'Iniciar Grabación')}
+            </button>
+            <p className="text-gray-400 text-xs text-center">{t('The app will guide you around the vehicle step by step.', 'La app lo guiará por el vehículo paso a paso.')}</p>
+          </div>
+        )}
+
+        {/* Recording — REC timer */}
         {phase === 'recording' && (
           <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 rounded-full px-3 py-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
             <span className="text-white font-mono font-bold text-sm">{cam.formattedTime}</span>
           </div>
         )}
+
+        {/* Recording — photo count badge */}
         {phase === 'recording' && capturedPhotos.length > 0 && (
           <div className="absolute top-3 right-3 bg-brand-blue/90 rounded-full px-2 py-1 text-white text-xs font-bold">
             {capturedPhotos.length} 📷
           </div>
         )}
+
+        {/* Recording — step guide + Photo/Stop buttons, all overlaid at bottom */}
         {phase === 'recording' && (
           <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
-            <div className="bg-black/80 backdrop-blur-sm rounded-xl px-3 py-3">
+            <div className="bg-black/80 backdrop-blur-sm rounded-xl px-3 py-3 flex flex-col gap-2">
               {/* Car position graphic + step header */}
-              <div className="flex items-start gap-3 mb-1.5">
+              <div className="flex items-start gap-3">
                 <CarPositionGraphic stepIndex={stepIndex} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -268,48 +292,61 @@ export default function VideoRecorder({ onComplete }) {
                   <p className="text-gray-300 text-xs mt-0.5 leading-tight">{currentStep.hint}</p>
                 </div>
               </div>
+              {/* Step progress bar */}
               <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full transition-all duration-1000 ease-linear ${
                   allDone ? 'bg-green-400' : 'bg-brand-blue'
                 }`} style={{ width: `${stepProgress * 100}%` }} />
               </div>
+              {/* Photo + Stop buttons */}
+              <div className="flex gap-3">
+                <button onClick={handleCapturePhoto}
+                  className="flex-1 bg-brand-mid/90 border border-brand-accent text-brand-white font-bold text-base py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                  <Camera className="w-5 h-5" />{t('Photo', 'Foto')}
+                </button>
+                <button onClick={handleStopRecording} disabled={!canStop}
+                  className="flex-[2] btn-danger disabled:opacity-40 disabled:pointer-events-none">
+                  <Square className="w-5 h-5 fill-white" />
+                  {canStop
+                    ? t('Stop Recording', 'Detener Grabación')
+                    : t(`Stop (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`, `Detener (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`)}
+                </button>
+              </div>
+              {!canStop && (
+                <p className="text-yellow-500 text-xs text-center font-semibold">
+                  {t(`⏱ Follow the steps above — Stop unlocks after ${MIN_RECORD_SECONDS}s`, `⏱ Siga los pasos — Detener se habilita después de ${MIN_RECORD_SECONDS}s`)}
+                </p>
+              )}
             </div>
           </div>
         )}
+
+        {/* Photo flash */}
         {photoFlash && <div className="absolute inset-0 bg-white opacity-70 pointer-events-none" />}
+
+        {/* Preview overlay */}
         {phase === 'preview' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
             <CheckCircle className="w-12 h-12 text-green-400" />
             <p className="text-white font-bold text-lg">{t('Video Recorded', 'Video Grabado')}</p>
-            {capturedPhotos.length > 0 && <p className="text-gray-300 text-sm">{t(`${capturedPhotos.length} photo${capturedPhotos.length !== 1 ? 's' : ''} captured`, `${capturedPhotos.length} foto${capturedPhotos.length !== 1 ? 's' : ''} capturada${capturedPhotos.length !== 1 ? 's' : ''}`)}</p>}
+            {capturedPhotos.length > 0 && (
+              <p className="text-gray-300 text-sm">
+                {t(`${capturedPhotos.length} photo${capturedPhotos.length !== 1 ? 's' : ''} captured`,
+                   `${capturedPhotos.length} foto${capturedPhotos.length !== 1 ? 's' : ''} capturada${capturedPhotos.length !== 1 ? 's' : ''}`)}
+              </p>
+            )}
           </div>
         )}
       </div>
 
-      {phase === 'ready' && (
-        <>
-          <button onClick={handleStartRecording} className="btn-primary"><Video className="w-6 h-6" />{t('Start Recording', 'Iniciar Grabación')}</button>
-          <p className="text-gray-500 text-xs text-center">{t('The app will guide you around the vehicle step by step.', 'La app lo guiará por el vehículo paso a paso.')}</p>
-        </>
-      )}
-      {phase === 'recording' && (
-        <>
-          <div className="flex gap-3">
-            <button onClick={handleCapturePhoto} className="flex-1 bg-brand-mid border border-brand-accent text-brand-white font-bold text-base py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform">
-              <Camera className="w-5 h-5" />{t('Photo', 'Foto')}
-            </button>
-            <button onClick={handleStopRecording} disabled={!canStop} className="flex-[2] btn-danger disabled:opacity-40 disabled:pointer-events-none">
-              <Square className="w-5 h-5 fill-white" />
-              {canStop ? t('Stop Recording', 'Detener Grabación') : t(`Stop (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`, `Detener (${Math.max(0, MIN_RECORD_SECONDS - totalSecs)}s)`)}
-            </button>
-          </div>
-          {!canStop && <p className="text-yellow-500 text-xs text-center font-semibold">{t(`⏱ Follow the steps above — Stop unlocks after ${MIN_RECORD_SECONDS}s`, `⏱ Siga los pasos — Detener se habilita después de ${MIN_RECORD_SECONDS}s`)}</p>}
-        </>
-      )}
+      {/* Preview controls — below the video (only shown after recording stops) */}
       {phase === 'preview' && (
-        <div className="flex gap-3">
-          <button onClick={handleReRecord} className="flex-1 btn-ghost"><RefreshCw className="w-5 h-5" />{t('Re-record', 'Volver a grabar')}</button>
-          <button onClick={handleContinue} disabled={continuing} className="flex-[2] btn-success disabled:opacity-50 disabled:pointer-events-none">
+        <div className="flex gap-3 shrink-0 pt-3">
+          <button onClick={handleReRecord} className="flex-1 btn-ghost">
+            <RefreshCw className="w-5 h-5" />{t('Re-record', 'Volver a grabar')}
+          </button>
+          <button onClick={handleContinue} disabled={continuing}
+            className="flex-[2] btn-success disabled:opacity-50 disabled:pointer-events-none">
             <CheckCircle className="w-5 h-5" />{t('Continue', 'Continuar')}
           </button>
         </div>

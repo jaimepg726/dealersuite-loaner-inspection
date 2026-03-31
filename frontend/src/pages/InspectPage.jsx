@@ -391,8 +391,12 @@ export default function InspectPage() {
     <div className="min-h-screen bg-brand-dark flex flex-col">
       <ConnectionStatusBanner uploading={uploading} />
       <PageHeader title={phaseTitle} subtitle={phase === 'recording' ? subtitle : undefined} showBack={phase === 'recording'} />
-      <main className="flex-1 flex flex-col px-5 pt-4 pb-8 gap-5">
-        <div className="flex items-center gap-2">
+      {/* Tighter padding + smaller gap in recording phase so VideoRecorder fills the
+          full viewport height in both portrait and landscape without scrolling. */}
+      <main className={phase === 'recording'
+        ? 'flex-1 flex flex-col px-3 pt-2 pb-3 gap-2'
+        : 'flex-1 flex flex-col px-5 pt-4 pb-8 gap-5'}>
+        <div className="flex items-center gap-2 shrink-0">
           {ORDERED.map((p, i) => (
             <div key={p} className="flex items-center gap-2">
               <div className={`w-2.5 h-2.5 rounded-full transition-all ${
