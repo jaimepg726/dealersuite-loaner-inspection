@@ -18,6 +18,10 @@ class InspectionMedia(Base):
     file_hash:     Mapped[Optional[str]]  = mapped_column(String(64), nullable=True, index=True)
     created_at:    Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
+    # Idempotency key — one UUID per completed recording, shared across the direct
+    # Drive path and the legacy fallback so the same attempt cannot produce two records.
+    upload_attempt_id:     Mapped[Optional[str]]      = mapped_column(String(36),               nullable=True)
+
     geo_latitude:          Mapped[Optional[float]]    = mapped_column(Float,                    nullable=True)
     geo_longitude:         Mapped[Optional[float]]    = mapped_column(Float,                    nullable=True)
     geo_accuracy_m:        Mapped[Optional[float]]    = mapped_column(Float,                    nullable=True)

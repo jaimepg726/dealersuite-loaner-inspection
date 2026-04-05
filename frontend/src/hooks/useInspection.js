@@ -24,6 +24,10 @@ export default function useInspection() {
   const pollRef = useRef(null)
   const uploadInFlightRef = useRef(false)
   const videoUploadedRef = useRef(false) // true once a video upload completes for this inspection
+  // One stable UUID per completed recording blob — shared across the Drive path
+  // (/upload-session) and the legacy fallback path (/upload) so the backend can
+  // identify both as the same attempt and prevent a second Drive file + DB record.
+  const uploadAttemptIdRef = useRef(null)
 
   // Mirror inspection state into a ref so uploadFile never closes over a stale
   // inspection value, and does NOT need inspection in its useCallback deps.
@@ -120,10 +124,11 @@ export default function useInspection() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Direct-to-Drive upload ──────────────────────────────────────────────────
-  async function _directDriveUpload(blob, mediaType, damageLocation, inspectionId, onProgress, geoData) {
+  async function _directDriveUpload(blob, mediaType, damageLocation, inspectionId, onProgress, geoData, attemptId) {
     const mimeType = blob.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg')
     const params = new URLSearchParams({ mime_type: mimeType, media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
+    if (attemptId) params.set('attempt_id', attemptId)
     let session
     try {
       const { data } = await api.post(`/api/inspect/${inspectionId}/upload-session?${params}`)
@@ -192,12 +197,13 @@ export default function useInspection() {
   }
 
   // ── Legacy upload (Railway proxy — fallback when Drive not connected) ────────
-  async function _legacyUpload(blob, mediaType, damageLocation, inspectionId, onProgress, geoData) {
+  async function _legacyUpload(blob, mediaType, damageLocation, inspectionId, onProgress, geoData, attemptId) {
     const form = new FormData()
     const ext = mediaType === 'video' ? 'mp4' : 'jpg'
     form.append('file', blob, `${mediaType}.${ext}`)
     const params = new URLSearchParams({ media_type: mediaType })
     if (damageLocation) params.set('damage_location', damageLocation)
+    if (attemptId) params.set('attempt_id', attemptId)
     if (geoData?.latitude  != null) params.set('geo_latitude',          String(geoData.latitude))
     if (geoData?.longitude != null) params.set('geo_longitude',         String(geoData.longitude))
     if (geoData?.accuracy  != null) params.set('geo_accuracy_m',        String(geoData.accuracy))
@@ -226,11 +232,25 @@ export default function useInspection() {
       return
     }
     uploadInFlightRef.current = true
+
+    // Generate one stable attempt ID per video recording blob.
+    // Reused across the Drive path and the legacy fallback path so the backend
+    // can detect both as the same recording attempt and prevent a second record.
+    if (mediaType === 'video' && !uploadAttemptIdRef.current) {
+      try {
+        uploadAttemptIdRef.current = crypto.randomUUID()
+      } catch {
+        // crypto.randomUUID not available (very old device / non-HTTPS dev)
+        uploadAttemptIdRef.current = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+      }
+    }
+    const attemptId = mediaType === 'video' ? uploadAttemptIdRef.current : null
+
     setUploading(true); setUploadPct(0); setError(null)
     try {
       let result
       try {
-        result = await _directDriveUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct), geoData)
+        result = await _directDriveUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct), geoData, attemptId)
       } catch (directErr) {
         if (directErr.finalizeFailedAfterUpload) {
           // Media reached Drive successfully — do NOT re-upload via legacy.
@@ -239,7 +259,7 @@ export default function useInspection() {
         }
         console.warn('Direct Drive upload failed, falling back to Railway proxy:', directErr.message)
         setUploadPct(0)
-        result = await _legacyUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct), geoData)
+        result = await _legacyUpload(blob, mediaType, damageLocation, currentInspection.id, (pct) => setUploadPct(pct), geoData, attemptId)
       }
       if (mediaType === 'video') videoUploadedRef.current = true
       const updated = await fetchInspection(currentInspection.id)
@@ -275,6 +295,7 @@ export default function useInspection() {
     setUploadPct(0); setError(null)
     uploadInFlightRef.current = false
     videoUploadedRef.current = false
+    uploadAttemptIdRef.current = null
     inspectionRef.current = null
   }, [])
 

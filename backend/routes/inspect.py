@@ -138,6 +138,7 @@ async def create_upload_session(
     mime_type: str = Query(...),
     media_type: str = Query(...),        # "video" | "photo"
     damage_location: str | None = Query(None),
+    attempt_id: str | None = Query(None, description="Client-generated UUID for this recording attempt — idempotency key"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -199,13 +200,47 @@ async def create_upload_session(
     if not resumable_url:
         raise HTTPException(status_code=502, detail="Drive did not return a resumable URL")
 
-    # Deduplication guard for video uploads:
+    # Deduplication guard for video uploads.
+    # Two-layer check:
+    #   1. attempt_id (idempotency key) — same recording attempt, regardless of path.
+    #      Prevents a Drive-PUT-succeeded-but-onerror-fired scenario from producing
+    #      two Drive files when the legacy fallback also uploads.
+    #   2. inspection_id + media_type fallback — catches any case where attempt_id
+    #      was not provided or differs.
+    #
+    # For each check:
     #   • pending orphan  (file_url == "pending") → previous session failed mid-flight;
     #     delete the orphan so the caller can start a fresh session.
-    #   • finalized record (file_url != "pending") → video already uploaded; reject.
-    # No time window: we check all historical records so a session-resume or
-    # Drive-PUT failure cannot sneak a second record through.
+    #   • finalized record (file_url != "pending") → video already uploaded; reject 409.
     if media_type == "video":
+        # Layer 1: attempt_id idempotency check
+        if attempt_id:
+            attempt_result = await db.execute(
+                select(InspectionMedia).where(
+                    InspectionMedia.inspection_id == inspection_id,
+                    InspectionMedia.upload_attempt_id == attempt_id,
+                )
+            )
+            attempt_existing = attempt_result.scalars().first()
+            if attempt_existing:
+                if attempt_existing.file_url != "pending":
+                    logger.warning(
+                        "upload-session: attempt %s already finalized (record %d, inspection %d) — 409",
+                        attempt_id, attempt_existing.id, inspection_id,
+                    )
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Video already uploaded for this recording attempt",
+                    )
+                logger.warning(
+                    "upload-session: deleting pending orphan (record %d) for attempt %s "
+                    "inspection %d — retry allowed",
+                    attempt_existing.id, attempt_id, inspection_id,
+                )
+                await db.delete(attempt_existing)
+                await db.commit()
+
+        # Layer 2: inspection-level dedup (covers missing or different attempt_id)
         dup_result = await db.execute(
             select(InspectionMedia).where(
                 InspectionMedia.inspection_id == inspection_id,
@@ -217,31 +252,33 @@ async def create_upload_session(
             if existing_vid.file_url != "pending":
                 logger.warning(
                     "upload-session: finalized video already exists for inspection %d "
-                    "(record %d) — rejecting duplicate session",
-                    inspection_id, existing_vid.id,
+                    "(record %d, attempt=%s) — rejecting duplicate session",
+                    inspection_id, existing_vid.id, existing_vid.upload_attempt_id,
                 )
                 raise HTTPException(
                     status_code=409,
                     detail="Video upload already in progress for this inspection",
                 )
-            # Orphaned pending record from a previous failed attempt — delete it
-            # so this retry session can proceed cleanly.
             logger.warning(
                 "upload-session: deleting orphaned pending video record %d "
-                "for inspection %d — allowing retry",
-                existing_vid.id, inspection_id,
+                "for inspection %d (attempt=%s) — allowing retry",
+                existing_vid.id, inspection_id, existing_vid.upload_attempt_id,
             )
             await db.delete(existing_vid)
             await db.commit()
 
-    # Pre-create the media record so we have an ID to return
-    # file_url is a placeholder — updated in /finalize-upload
+    # Pre-create the media record so we have an ID to return.
+    # file_url is a placeholder — updated in /finalize-upload.
+    # upload_attempt_id ties this record to the specific recording blob so the
+    # legacy fallback path can detect it and return deduplicated instead of
+    # creating a second record for the same attempt.
     record = InspectionMedia(
         inspection_id=inspection_id,
         file_url="pending",
         media_type=media_type,
         mime_type=mime_type.split(";")[0].strip(),
         file_data=None,
+        upload_attempt_id=attempt_id,
         created_at=_utcnow(),
     )
     db.add(record)
@@ -340,6 +377,7 @@ async def upload_media(
     geo_accuracy_m:        float | None = Query(None),
     geo_permission_status: str   | None = Query(None),
     overlay_burned_in:     bool         = Query(False),
+    attempt_id:            str   | None = Query(None, description="Client idempotency key — same as /upload-session"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -364,14 +402,53 @@ async def upload_media(
     if content_type not in ALLOWED_MIMETYPES:
         raise HTTPException(status_code=415, detail=f"Unsupported MIME type '{content_type}'")
 
-    # Video dedup — check for existing video records.
-    # • Finalized record (file_url != "pending") → already uploaded; return it.
-    # • Pending orphan (file_url == "pending") → previous /upload-session failed
-    #   before /finalize-upload was called; delete it so this legacy upload can
-    #   save the actual video bytes.  Returning the orphan as-is would leave
-    #   file_url="pending" forever (stripped by the Pydantic validator → manager
-    #   sees "No media was uploaded" even though the porter completed the flow).
+    # Video dedup — two-layer check mirrors /upload-session logic.
+    #
+    # Layer 1: attempt_id idempotency — if this is the legacy fallback for a
+    #   recording whose /upload-session pending row already existed (Drive PUT
+    #   fired and Drive may have received the bytes), we can detect the same
+    #   attempt and avoid creating a second Drive file + DB record.
+    #   • Finalized record with same attempt_id → already uploaded; return it.
+    #   • Pending record with same attempt_id → orphan from failed Drive path;
+    #     delete it and proceed with this legacy upload so the record gets a
+    #     real file_url.
+    #
+    # Layer 2: inspection-level dedup (covers missing attempt_id).
+    #   • Finalized record → return deduplicated.
+    #   • Pending orphan → delete and re-upload.
     if media_type == "video":
+        # Layer 1
+        if attempt_id:
+            attempt_result = await db.execute(
+                select(InspectionMedia).where(
+                    InspectionMedia.inspection_id == inspection_id,
+                    InspectionMedia.upload_attempt_id == attempt_id,
+                )
+            )
+            attempt_existing = attempt_result.scalars().first()
+            if attempt_existing:
+                if attempt_existing.file_url != "pending":
+                    logger.warning(
+                        "upload (legacy): attempt %s already finalized (record %d, inspection %d) "
+                        "— returning deduplicated",
+                        attempt_id, attempt_existing.id, inspection_id,
+                    )
+                    return UploadResponse(
+                        file_id=str(attempt_existing.id),
+                        file_url=attempt_existing.file_url,
+                        filename=file.filename or f"video_{attempt_existing.id}",
+                        bytes_uploaded=len(content),
+                        backend="deduplicated",
+                    )
+                logger.warning(
+                    "upload (legacy): deleting pending orphan (record %d) for attempt %s "
+                    "inspection %d — proceeding with fresh upload",
+                    attempt_existing.id, attempt_id, inspection_id,
+                )
+                await db.delete(attempt_existing)
+                await db.flush()
+
+        # Layer 2: inspection-level fallback
         vid_dup = await db.execute(
             select(InspectionMedia).where(
                 InspectionMedia.inspection_id == inspection_id,
@@ -384,8 +461,8 @@ async def upload_media(
                 # Already finalized — return it to prevent a true duplicate.
                 logger.warning(
                     "upload (legacy): finalized video already exists for inspection %d "
-                    "(record %d, url=%s) — skipping duplicate",
-                    inspection_id, vid_existing.id, vid_existing.file_url,
+                    "(record %d, attempt=%s) — skipping duplicate",
+                    inspection_id, vid_existing.id, vid_existing.upload_attempt_id,
                 )
                 return UploadResponse(
                     file_id=str(vid_existing.id),
@@ -397,8 +474,8 @@ async def upload_media(
             # Orphaned pending record — delete it and fall through to upload fresh.
             logger.warning(
                 "upload (legacy): deleting orphaned pending video record %d "
-                "for inspection %d — proceeding with fresh upload",
-                vid_existing.id, inspection_id,
+                "for inspection %d (attempt=%s) — proceeding with fresh upload",
+                vid_existing.id, inspection_id, vid_existing.upload_attempt_id,
             )
             await db.delete(vid_existing)
             await db.flush()
@@ -419,11 +496,14 @@ async def upload_media(
             bytes_uploaded=len(content), backend="deduplicated",
         )
 
-    # Save BYTEA to DB
+    # Save BYTEA to DB — include attempt_id so subsequent dedup checks can
+    # match this record even if the Drive opportunistic upload changes file_url.
     record = InspectionMedia(
         inspection_id=inspection_id, file_url="",
         media_type=media_type, mime_type=content_type,
-        file_data=content, file_hash=file_hash, created_at=_utcnow(),
+        file_data=content, file_hash=file_hash,
+        upload_attempt_id=attempt_id,
+        created_at=_utcnow(),
     )
     db.add(record)
     await db.flush()
