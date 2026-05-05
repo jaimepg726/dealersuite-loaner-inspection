@@ -218,12 +218,13 @@ export default function ScanVINPage() {
           <div className="flex flex-col gap-3">
             <p className="text-gray-400 text-sm text-center">
               {t(
-                'Aim at the VIN barcode or 17-character VIN on the driver door jamb. Hold steady. Use Manual if the scanner cannot read it.',
-                'Apunte al código de barras o los 17 caracteres del VIN en el pilar de la puerta. Use Manual si el escáner no puede leerlo.'
+                'Open the driver door. Fit the VIN label inside the box and take a clear photo. Confirm the VIN before continuing.',
+                'Abra la puerta del conductor. Encuadre la etiqueta VIN y tome una foto clara. Confirme el VIN antes de continuar.'
               )}
             </p>
             <VINScanner
               onDetected={handleVINDetected}
+              onManual={handleEditManually}
               active={vinMethod === 'scan' && !loanerLoading && !notFound}
             />
           </div>
@@ -249,7 +250,7 @@ export default function ScanVINPage() {
             <div className="flex gap-3">
               <button onClick={handleScanAgain} className="btn-ghost flex-1">
                 <RotateCcw className="w-4 h-4" />
-                {t('Scan Again', 'Escanear de nuevo')}
+                {t('Retake Photo', 'Tomar otra foto')}
               </button>
               <button onClick={handleEditManually} className="btn-ghost flex-1">
                 <Pencil className="w-4 h-4" />

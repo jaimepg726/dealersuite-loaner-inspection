@@ -47,6 +47,18 @@ export function validateVIN(raw) {
 }
 
 /**
+ * Conservative OCR normalization applied before VIN extraction.
+ * Only swaps characters that are unambiguously wrong in a VIN:
+ *   O → 0  (letter O is banned in VINs; OCR often returns it for zero)
+ *   I → 1  (letter I is banned in VINs; OCR often returns it for one)
+ * Q, L, S, B are NOT mapped — too ambiguous to substitute blindly.
+ */
+export function normalizeOCRText(text) {
+  if (!text) return ''
+  return text.toUpperCase().replace(/O/g, '0').replace(/I/g, '1')
+}
+
+/**
  * Tries to extract a valid 17-char VIN from a longer OCR string.
  * Scans for the first 17-char run that passes VIN rules.
  */
