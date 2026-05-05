@@ -10,11 +10,11 @@
 
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Hash, Camera, Keyboard, Loader2, Video } from 'lucide-react'
+import { Hash, Camera, Keyboard, Loader2, Video, CheckCircle, RotateCcw, Pencil } from 'lucide-react'
 
 import PageHeader          from '../components/ui/PageHeader'
 import LoadingScreen       from '../components/ui/LoadingScreen'
-import OCRScanner          from '../components/inspection/OCRScanner'
+import VINScanner          from '../components/inspection/VINScanner'
 import ManualVINEntry      from '../components/inspection/ManualVINEntry'
 import useVehicleLookup    from '../hooks/useVehicleLookup'
 import { t } from '../utils/lang'
@@ -26,9 +26,10 @@ const VIN_METHODS = [
 
 export default function ScanVINPage() {
   const navigate  = useNavigate()
-  const [vinMethod,   setVinMethod]   = useState('scan')
-  const [scanned,     setScanned]     = useState(null)
-  const [loanerInput, setLoanerInput] = useState('')
+  const [vinMethod,    setVinMethod]    = useState('scan')
+  const [scanned,      setScanned]      = useState(null)
+  const [pendingVin,   setPendingVin]   = useState(null)
+  const [loanerInput,  setLoanerInput]  = useState('')
   const [loanerLoading, setLoanerLoading] = useState(false)
 
   const { loading, error, notFound, lookup, lookupByLoaner, reset } = useVehicleLookup()
@@ -37,8 +38,31 @@ export default function ScanVINPage() {
     navigate('/select-type', { state: { vehicle } })
   }
 
-  // Called by any VIN scanner when a VIN is detected
-  const handleVINDetected = useCallback(async (vin) => {
+  // Scanner detected a valid VIN: show confirmation card, do NOT lookup yet
+  const handleVINDetected = useCallback((vin) => {
+    setPendingVin(vin)
+  }, [])
+
+  // Porter confirmed the scanned VIN: run the lookup
+  const handleConfirm = useCallback(async () => {
+    const vin = pendingVin
+    setPendingVin(null)
+    setScanned(vin)
+    const vehicle = await lookup(vin)
+    if (vehicle) openCamera(vehicle)
+  }, [pendingVin, lookup]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleScanAgain() {
+    setPendingVin(null)
+  }
+
+  function handleEditManually() {
+    setPendingVin(null)
+    setVinMethod('manual')
+  }
+
+  // Manual entry already has its own "Confirm VIN" step — go straight to lookup
+  const handleManualDetected = useCallback(async (vin) => {
     setScanned(vin)
     const vehicle = await lookup(vin)
     if (vehicle) openCamera(vehicle)
@@ -176,7 +200,7 @@ export default function ScanVINPage() {
             return (
               <button
                 key={id}
-                onClick={() => { setVinMethod(id); setScanned(null); reset() }}
+                onClick={() => { setVinMethod(id); setScanned(null); setPendingVin(null); reset() }}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
                              text-xs font-bold transition-colors border
                              ${vinMethod === id
@@ -190,23 +214,53 @@ export default function ScanVINPage() {
           })}
         </div>
 
-        {vinMethod === 'scan' && (
+        {vinMethod === 'scan' && !pendingVin && (
           <div className="flex flex-col gap-3">
             <p className="text-gray-400 text-sm text-center">
               {t(
-                'Point camera at the VIN on the windshield sticker or door jamb, then tap Scan',
-                'Apunte la cámara al VIN en el parabrisas o puerta, luego toque Escanear'
+                'Aim at the VIN barcode or 17-character VIN on the driver door jamb. Hold steady. Use Manual if the scanner cannot read it.',
+                'Apunte al código de barras o los 17 caracteres del VIN en el pilar de la puerta. Use Manual si el escáner no puede leerlo.'
               )}
             </p>
-            <OCRScanner
+            <VINScanner
               onDetected={handleVINDetected}
               active={vinMethod === 'scan' && !loanerLoading && !notFound}
             />
           </div>
         )}
 
+        {vinMethod === 'scan' && pendingVin && (
+          <div className="flex flex-col gap-4 bg-brand-mid border border-brand-blue/40 rounded-2xl px-5 py-5">
+            <div>
+              <p className="text-xs text-brand-blue font-semibold uppercase tracking-widest mb-2">
+                {t('Detected VIN', 'VIN Detectado')}
+              </p>
+              <p className="font-mono text-brand-white text-lg tracking-widest break-all">
+                {pendingVin}
+              </p>
+            </div>
+            <p className="text-gray-400 text-sm">
+              {t('Confirm the VIN before continuing.', 'Confirme el VIN antes de continuar.')}
+            </p>
+            <button onClick={handleConfirm} className="btn-primary">
+              <CheckCircle className="w-5 h-5" />
+              {t('Use This VIN', 'Usar este VIN')}
+            </button>
+            <div className="flex gap-3">
+              <button onClick={handleScanAgain} className="btn-ghost flex-1">
+                <RotateCcw className="w-4 h-4" />
+                {t('Scan Again', 'Escanear de nuevo')}
+              </button>
+              <button onClick={handleEditManually} className="btn-ghost flex-1">
+                <Pencil className="w-4 h-4" />
+                {t('Edit Manually', 'Editar Manual')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {vinMethod === 'manual' && (
-          <ManualVINEntry onDetected={handleVINDetected} />
+          <ManualVINEntry onDetected={handleManualDetected} />
         )}
 
       </main>
